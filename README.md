@@ -2,6 +2,10 @@
 
 **Answers grounded in your knowledge.** Kivo is a production-oriented, multi-tenant AI knowledge base built on Cloudflare. It ingests private documents, enforces collection permissions before retrieval, combines Vectorize and FTS5 results, reranks evidence, and streams cited answers.
 
+**[Open the live Kivo demo](https://kivo-web.ajaypathak2527.workers.dev)** · [API health](https://kivo-web.ajaypathak2527.workers.dev/api/v1/health)
+
+The live demo has real D1/FTS5, Vectorize, Queues, Workers AI retrieval, and streamed generation. Its upload persistence is intentionally paused until R2 is activated on the hosting account; the API fails closed instead of silently using a paid service.
+
 ## Stack
 
 - Next.js 16.2, React 19.2, Tailwind CSS 4, Better Auth, AI SDK 7

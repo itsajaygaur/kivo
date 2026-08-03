@@ -151,6 +151,13 @@ async function route(request: Request, path: string[]): Promise<Response> {
     );
   }
   if (path[0] === "uploads" && request.method === "PUT" && path[1] && path[2]) {
+    if (!env.DOCUMENTS) {
+      return problem(
+        503,
+        "Document storage unavailable",
+        "R2 is not activated for this deployment. Existing knowledge remains available, but uploads are paused.",
+      );
+    }
     const version = await env.DB.prepare(
       "SELECT r2_key,checksum FROM document_version WHERE organization_id=? AND document_id=? AND id=?",
     )

@@ -15,11 +15,10 @@
     {
       "binding": "DB",
       "database_name": "kivo-db",
-      "database_id": "replace-with-d1-id",
+      "database_id": "69b49a77-87c2-4cf9-a324-0a966e3f5b91",
       "migrations_dir": "../../packages/db/migrations",
     },
   ],
-  "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "kivo-documents" }],
   "vectorize": [{ "binding": "VECTOR_INDEX", "index_name": "kivo-chunks" }],
   "ai": { "binding": "AI" },
   "queues": {
@@ -34,5 +33,4 @@
       },
     ],
   },
-  "analytics_engine_datasets": [{ "binding": "KIVO_ANALYTICS", "dataset": "kivo_events" }],
 }
