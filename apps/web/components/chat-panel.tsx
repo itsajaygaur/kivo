@@ -140,6 +140,8 @@ export function ChatPanel() {
                 const sources = getUniqueSources(message);
                 const isLatest = index === messages.length - 1;
                 const isStreaming = message.role === "assistant" && isLatest && active;
+                const sourceOnlyAssistant = message.role === "assistant" && !text && sources.length;
+                if (sourceOnlyAssistant && isLatest && active) return null;
                 if (!text && !sources.length) return null;
 
                 return (
@@ -158,6 +160,23 @@ export function ChatPanel() {
                         ) : (
                           <div className="message-text">{text}</div>
                         ))}
+
+                      {sourceOnlyAssistant && !active && (
+                        <div className="empty-answer-state">
+                          <strong>Kivo couldn’t finish that answer.</strong>
+                          <span>
+                            Your sources were found, but generation ended before text arrived.
+                          </span>
+                          {isLatest && (
+                            <button
+                              type="button"
+                              onClick={() => void regenerate({ messageId: message.id })}
+                            >
+                              <RotateCcw size={13} /> Try again
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                       {!!sources.length && (
                         <div className="message-sources" aria-label="Sources">
