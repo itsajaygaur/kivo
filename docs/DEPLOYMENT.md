@@ -5,7 +5,7 @@
 3. Store Better Auth, OAuth, encryption, and service secrets with `wrangler secret put`; do not place secrets in `vars`.
 4. Apply migrations with `wrangler d1 migrations apply kivo-db --remote --config apps/web/wrangler.jsonc`.
 5. Deploy the private worker first: `pnpm --filter @kivo/ai-worker build` then `wrangler deploy -c apps/ai-worker/wrangler.jsonc`.
-6. Build and deploy web: `pnpm --filter @kivo/web build:worker && pnpm --filter @kivo/web deploy`.
+6. Build and deploy web: `pnpm --filter @kivo/web build:worker && pnpm --filter @kivo/web run deploy`.
 7. Add an optional `DOCUMENTS` R2 binding to the web Worker if original-file retention is required. Without it, browser-extracted text is still indexed and searchable.
 8. Verify `/api/v1/health`, authentication, a small upload, queue completion, hybrid search, citations, and purge.
 

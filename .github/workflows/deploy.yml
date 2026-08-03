@@ -27,7 +27,7 @@ jobs:
             CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
             CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
           }
-      - run: pnpm --filter @kivo/web deploy
+      - run: pnpm --filter @kivo/web run deploy
         env:
           {
             CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
