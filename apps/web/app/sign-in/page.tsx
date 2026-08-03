@@ -6,6 +6,7 @@ import { AlertCircle, Code2, KeyRound, LoaderCircle } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { authClient } from "@/lib/auth-client";
 import { api } from "@/lib/api-client";
+import { safeReturnTo } from "@/lib/safe-return-to";
 
 type Capabilities = {
   emailPassword: boolean;
@@ -29,15 +30,15 @@ export default function SignIn() {
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("returnTo");
-    if (requested?.startsWith("/") && !requested.startsWith("//")) setReturnTo(requested);
+    const destination = safeReturnTo(requested);
+    setReturnTo(destination);
     void api<{ data: Capabilities }>("/auth-capabilities")
       .then(({ data }) => setCapabilities(data))
       .catch(() => setCapabilities(null));
     void authClient.getSession().then(async ({ data }) => {
       if (!data) return;
       const workspaces = await api<{ data: unknown[] }>("/workspaces").catch(() => ({ data: [] }));
-      if (workspaces.data.length)
-        window.location.assign(requested?.startsWith("/") ? requested : "/app");
+      if (workspaces.data.length) window.location.assign(destination);
       else setOnboarding(true);
     });
   }, []);
