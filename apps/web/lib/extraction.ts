@@ -11,6 +11,64 @@ const mimeByExtension: Record<string, string> = {
   json: "application/json",
 };
 const acceptedMimeTypes = new Set(Object.values(mimeByExtension));
+const pageMarker = (page: number) => `\n\n[KIVO_PAGE:${page}]\n\n`;
+
+function extractedLength(value: string) {
+  return value.replace(/\[KIVO_PAGE:\d+\]/g, "").trim().length;
+}
+
+function htmlToPlainText(source: string) {
+  let output = "";
+  let suppressed: "script" | "style" | null = null;
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (character === "<") {
+      let quote: '"' | "'" | null = null;
+      let end = index + 1;
+      for (; end < source.length; end++) {
+        const tagCharacter = source[end];
+        if (quote) {
+          if (tagCharacter === quote) quote = null;
+        } else if (tagCharacter === '"' || tagCharacter === "'") quote = tagCharacter;
+        else if (tagCharacter === ">") break;
+      }
+      if (end >= source.length) {
+        if (!suppressed) output += character;
+        continue;
+      }
+      const rawTag = source
+        .slice(index + 1, end)
+        .trim()
+        .toLowerCase();
+      const closing = rawTag.startsWith("/");
+      const tagName = rawTag.replace(/^\//, "").match(/^[a-z0-9-]+/)?.[0];
+      if (!closing && (tagName === "script" || tagName === "style")) suppressed = tagName;
+      else if (closing && tagName === suppressed) suppressed = null;
+      if (!suppressed) output += " ";
+      index = end;
+    } else if (!suppressed) output += character;
+  }
+  const namedEntities: Record<string, string> = {
+    amp: "&",
+    apos: "'",
+    gt: ">",
+    lt: "<",
+    nbsp: " ",
+    quot: '"',
+  };
+  return output
+    .replace(/&#(x?[0-9a-f]+);/gi, (_, value: string) => {
+      const numeric = value.toLowerCase().startsWith("x")
+        ? Number.parseInt(value.slice(1), 16)
+        : Number.parseInt(value, 10);
+      return Number.isFinite(numeric) && numeric > 0 && numeric <= 0x10ffff
+        ? String.fromCodePoint(numeric)
+        : "";
+    })
+    .replace(/&([a-z]+);/gi, (entity, name: string) => namedEntities[name.toLowerCase()] ?? entity)
+    .replace(/\s+/g, " ")
+    .trim();
+}
 export function detectMimeType(file: File): string {
   if (acceptedMimeTypes.has(file.type)) return file.type;
   return mimeByExtension[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "text/plain";
@@ -43,11 +101,11 @@ export async function extractDocument(file: File): Promise<ExtractionResult> {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
       output.push(
-        `\n\n<!-- page:${pageNumber} -->\n\n${content.items.map((item) => ("str" in item ? item.str : "")).join(" ")}`,
+        `${pageMarker(pageNumber)}${content.items.map((item) => ("str" in item ? item.str : "")).join(" ")}`,
       );
     }
     text = output.join("");
-    if (text.replace(/<!--.*?-->/g, "").trim().length < 80) {
+    if (extractedLength(text) < 80) {
       const ocrOutput: string[] = [];
       try {
         for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 100); pageNumber++) {
@@ -67,8 +125,7 @@ export async function extractDocument(file: File): Promise<ExtractionResult> {
           });
           if (!response.ok) throw new Error("OCR is unavailable.");
           const result = (await response.json()) as { response?: string };
-          if (result.response)
-            ocrOutput.push(`\n\n<!-- page:${pageNumber} -->\n\n${result.response}`);
+          if (result.response) ocrOutput.push(`${pageMarker(pageNumber)}${result.response}`);
         }
         if (ocrOutput.length) text = ocrOutput.join("");
       } catch {
@@ -77,12 +134,10 @@ export async function extractDocument(file: File): Promise<ExtractionResult> {
     }
   } else if (type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     const mammoth = await import("mammoth");
-    const html = (await mammoth.convertToHtml({ arrayBuffer: buffer })).value;
-    text = new DOMParser().parseFromString(html, "text/html").body.innerText;
+    text = (await mammoth.extractRawText({ arrayBuffer: buffer })).value;
   } else {
     text = new TextDecoder().decode(buffer);
-    if (type === "text/html")
-      text = new DOMParser().parseFromString(text, "text/html").body.textContent ?? "";
+    if (type === "text/html") text = htmlToPlainText(text);
     if (type === "application/json") text = JSON.stringify(JSON.parse(text), null, 2);
   }
   const normalized = text.trim();
@@ -91,7 +146,6 @@ export async function extractDocument(file: File): Promise<ExtractionResult> {
     pages,
     chunks: chunkText(normalized),
     checksum,
-    needsOcr:
-      type === "application/pdf" && normalized.replace(/<!--.*?-->/g, "").trim().length < 80,
+    needsOcr: type === "application/pdf" && extractedLength(normalized) < 80,
   };
 }

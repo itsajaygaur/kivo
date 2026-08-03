@@ -53,7 +53,7 @@ export default function Home() {
           <Link href="/security">Security</Link>
           <Link href="/docs">Docs</Link>
           <Link href="/sign-in">Sign in</Link>
-          <Link href="/app" className="button-primary">
+          <Link href="/sign-in" className="button-primary">
             Open workspace <ArrowRight size={14} />
           </Link>
         </div>
@@ -74,12 +74,12 @@ export default function Home() {
             loosening a single permission.
           </p>
           <div className="hero-actions">
-            <Link href="/app" className="button-primary">
+            <Link href="/sign-in" className="button-primary">
               Build your knowledge base <ArrowRight size={15} />
             </Link>
-            <Link href="/docs" className="button-secondary">
-              Explore the docs
-            </Link>
+            <a href="/demo" className="button-secondary">
+              Try the live demo
+            </a>
           </div>
           <p className="microcopy">
             <CheckCircle2 size={12} style={{ display: "inline", marginRight: 5 }} />

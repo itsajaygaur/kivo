@@ -45,7 +45,7 @@ function titleFromFilename(filename: string) {
 }
 
 function pageForOffset(text: string, offset: number): number | null {
-  const markers = [...text.slice(0, offset).matchAll(/<!-- page:(\d+) -->/g)];
+  const markers = [...text.slice(0, offset).matchAll(/\[KIVO_PAGE:(\d+)\]/g)];
   const latest = markers.at(-1)?.[1];
   return latest ? Number(latest) : null;
 }

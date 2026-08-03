@@ -5,24 +5,23 @@ import { useEffect, useState } from "react";
 import {
   Activity,
   BarChart3,
-  BookOpen,
   Bot,
   Boxes,
   ChevronsUpDown,
   CircleHelp,
   FileText,
-  Gauge,
   History,
-  KeyRound,
   LayoutDashboard,
   Search,
   Settings,
   Shield,
   Upload,
   Users,
+  LogOut,
 } from "lucide-react";
 import { Logo } from "./logo";
 import { api, ApiError } from "@/lib/api-client";
+import { authClient } from "@/lib/auth-client";
 const primary = [
   [/app$/, "/app", LayoutDashboard, "Overview"],
   [/documents/, "/app/documents", FileText, "Documents"],
@@ -39,17 +38,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [workspace, setWorkspace] = useState<{
+    id: string;
     name: string;
     userName: string;
     role: string;
+    demo: boolean;
+    platformAdmin: boolean;
   } | null>(null);
+  const [workspaces, setWorkspaces] = useState<
+    Array<{ id: string; name: string; role: string; active: number | boolean; demo?: boolean }>
+  >([]);
   useEffect(() => {
-    void api<{ data: { name: string; userName: string; role: string } }>("/workspace")
-      .then(({ data }) => setWorkspace(data))
+    void Promise.all([
+      api<{
+        data: {
+          id: string;
+          name: string;
+          userName: string;
+          role: string;
+          demo: boolean;
+          platformAdmin: boolean;
+        };
+      }>("/workspace"),
+      api<{ data: Array<{ id: string; name: string; role: string; active: number | boolean }> }>(
+        "/workspaces",
+      ),
+    ])
+      .then(([current, available]) => {
+        setWorkspace(current.data);
+        setWorkspaces(available.data);
+      })
       .catch((error) => {
         if (error instanceof ApiError && error.status === 401) router.replace("/sign-in");
       });
   }, [router]);
+
+  async function switchWorkspace(organizationId: string) {
+    if (!organizationId || organizationId === workspace?.id) return;
+    await api(`/workspaces/${organizationId}/activate`, { method: "POST" });
+    window.location.assign("/app");
+  }
+
+  async function signOut() {
+    await api("/demo-session", { method: "DELETE" }).catch(() => undefined);
+    await authClient.signOut().catch(() => undefined);
+    window.location.assign("/sign-in");
+  }
   const initials = (workspace?.userName ?? "Kivo User")
     .split(/\s+/)
     .map((part) => part[0])
@@ -60,7 +94,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-layout">
       <aside className="sidebar">
         <Logo href="/app" />
-        <button className="workspace-switch">
+        <div className="workspace-switch">
           <span className="workspace-logo">AR</span>
           <div style={{ textAlign: "left", minWidth: 0 }}>
             <div style={{ fontWeight: 650, fontSize: 12 }}>{workspace?.name ?? "Workspace"}</div>
@@ -68,8 +102,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {workspace ? `${workspace.role} access` : "Loading…"}
             </div>
           </div>
-          <ChevronsUpDown size={13} style={{ marginLeft: "auto" }} />
-        </button>
+          {workspaces.length > 1 ? (
+            <select
+              aria-label="Switch workspace"
+              value={workspace?.id ?? ""}
+              onChange={(event) => void switchWorkspace(event.target.value)}
+            >
+              {workspaces.map((item) => (
+                <option value={item.id} key={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <ChevronsUpDown size={13} style={{ marginLeft: "auto" }} />
+          )}
+        </div>
         <div className="side-label">Workspace</div>
         {primary.map(([match, href, Icon, label]) => (
           <Link
@@ -95,10 +143,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         ))}
         <div className="sidebar-bottom">
-          <Link href="/app/admin" className="side-link">
-            <Shield />
-            <span>Platform admin</span>
-          </Link>
+          {workspace?.platformAdmin && (
+            <Link href="/app/admin" className="side-link">
+              <Shield />
+              <span>Platform admin</span>
+            </Link>
+          )}
           <Link href="/app/settings" className="side-link">
             <Settings />
             <span>Settings</span>
@@ -117,6 +167,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {workspace?.role ?? "Member"}
               </div>
             </div>
+            <button aria-label="Sign out" className="icon-button" onClick={() => void signOut()}>
+              <LogOut size={14} />
+            </button>
           </div>
         </div>
       </aside>

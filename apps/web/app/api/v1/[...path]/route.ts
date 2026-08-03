@@ -10,6 +10,7 @@ import {
   type Permission,
 } from "@kivo/shared";
 import { bindings, requireActor, type Actor } from "@/lib/cloudflare";
+import { handleAccountRoute } from "@/lib/account-api";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -57,7 +58,45 @@ const collectionSchema = z.object({
   name: z.string().trim().min(2).max(100),
   description: z.string().trim().max(500).optional(),
   restricted: z.boolean().default(false),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#5b5bd6"),
 });
+const collectionUpdateSchema = collectionSchema
+  .partial()
+  .refine((value) => Object.keys(value).length, {
+    message: "Provide at least one collection change.",
+  });
+const collectionMembersSchema = z.object({ memberIds: z.array(z.string()).max(250) });
+const workspaceUpdateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(100).optional(),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(50)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+    retentionDays: z.number().int().min(1).max(3650).optional(),
+  })
+  .refine((value) => Object.keys(value).length, {
+    message: "Provide at least one workspace change.",
+  });
+const invitationSchema = z.object({
+  email: z.string().trim().email().max(255),
+  role: z.enum(["admin", "editor", "viewer"]),
+});
+const memberRoleSchema = z.object({ role: z.enum(["owner", "admin", "editor", "viewer"]) });
+const adminOrganizationSchema = z
+  .object({
+    suspended: z.boolean().optional(),
+    maxDocuments: z.number().int().min(1).max(10_000).optional(),
+    maxMembers: z.number().int().min(1).max(1_000).optional(),
+    maxStorageBytes: z.number().int().min(1_048_576).max(109_951_162_777_600).optional(),
+  })
+  .refine((value) => Object.keys(value).length, { message: "Provide at least one change." });
 const ocrSchema = z.object({ image: z.string().min(100).max(15_000_000) });
 
 function requestId(request: Request) {
@@ -66,6 +105,16 @@ function requestId(request: Request) {
 
 function forbidden(permission: Permission) {
   return problem(403, "Permission denied", `Your workspace role does not grant ${permission}.`);
+}
+
+function demoSafeguard(actor: Actor) {
+  return actor.isDemo
+    ? problem(
+        403,
+        "Demo safeguard",
+        "Shared demo visitors can explore documents, collections, search, and chat, but cannot change workspace access or platform settings.",
+      )
+    : null;
 }
 
 async function accessibleCollectionIds(env: Env, actor: Actor): Promise<string[]> {
@@ -129,6 +178,9 @@ async function route(request: Request, path: string[]): Promise<Response> {
       "Run pnpm --filter @kivo/web preview to use the Cloudflare-backed application.",
     );
 
+  const accountResponse = await handleAccountRoute(request, path, env);
+  if (accountResponse) return accountResponse;
+
   let actor: Actor;
   try {
     actor = await requireActor(request, env);
@@ -143,13 +195,60 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "workspace" && request.method === "GET") {
     const row = await env.DB.prepare(
-      `SELECT o.id,o.name,o.slug,u.name AS userName,u.email AS userEmail
+      `SELECT o.id,o.name,o.slug,u.name AS userName,u.email AS userEmail,
+              s.retention_days AS retentionDays,s.max_documents AS maxDocuments,
+              s.max_storage_bytes AS maxStorageBytes,s.max_members AS maxMembers
        FROM organization o JOIN user u ON u.id=?
+       LEFT JOIN workspace_settings s ON s.organization_id=o.id
        WHERE o.id=? AND o.deleted_at IS NULL`,
     )
       .bind(actor.userId, actor.organizationId)
       .first();
-    return Response.json({ data: { ...row, role: actor.role } });
+    return Response.json({
+      data: {
+        ...row,
+        role: actor.role,
+        demo: actor.isDemo,
+        platformAdmin: actor.isPlatformAdmin,
+      },
+    });
+  }
+
+  if (path[0] === "workspace" && request.method === "PATCH") {
+    if (!can(actor.role, "workspace:update")) return forbidden("workspace:update");
+    const safeguarded = demoSafeguard(actor);
+    if (safeguarded) return safeguarded;
+    const parsed = workspaceUpdateSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success)
+      return problem(
+        422,
+        "Invalid workspace settings",
+        parsed.error.issues[0]?.message ?? "Invalid payload.",
+      );
+    if (parsed.data.slug) {
+      const duplicate = await env.DB.prepare("SELECT id FROM organization WHERE slug=? AND id<>?")
+        .bind(parsed.data.slug, actor.organizationId)
+        .first();
+      if (duplicate) return problem(409, "Slug unavailable", "Choose another workspace slug.");
+    }
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE organization SET name=COALESCE(?,name),slug=COALESCE(?,slug),updated_at=? WHERE id=?",
+      ).bind(parsed.data.name ?? null, parsed.data.slug ?? null, now, actor.organizationId),
+      env.DB.prepare(
+        "UPDATE workspace_settings SET retention_days=COALESCE(?,retention_days),updated_at=? WHERE organization_id=?",
+      ).bind(parsed.data.retentionDays ?? null, now, actor.organizationId),
+    ]);
+    await writeAudit(
+      env,
+      actor,
+      "workspace.updated",
+      "workspace",
+      actor.organizationId,
+      parsed.data,
+    );
+    return Response.json({ data: { updated: true } });
   }
 
   if (path[0] === "documents" && request.method === "GET" && !path[1]) {
@@ -221,18 +320,28 @@ async function route(request: Request, path: string[]): Promise<Response> {
         "A document with the same contents is already indexed.",
       );
 
-    const usage = await env.DB.prepare(
-      "SELECT COUNT(*) AS documents,COALESCE(SUM(bytes),0) AS storageBytes FROM document WHERE organization_id=? AND deleted_at IS NULL",
-    )
-      .bind(actor.organizationId)
-      .first<{ documents: number; storageBytes: number }>();
-    if ((usage?.documents ?? 0) >= workspaceLimits.documents)
+    const [usage, configuredLimits] = await Promise.all([
+      env.DB.prepare(
+        "SELECT COUNT(*) AS documents,COALESCE(SUM(bytes),0) AS storageBytes FROM document WHERE organization_id=? AND deleted_at IS NULL",
+      )
+        .bind(actor.organizationId)
+        .first<{ documents: number; storageBytes: number }>(),
+      env.DB.prepare(
+        "SELECT max_documents AS documents,max_storage_bytes AS storageBytes FROM workspace_settings WHERE organization_id=?",
+      )
+        .bind(actor.organizationId)
+        .first<{ documents: number; storageBytes: number }>(),
+    ]);
+    if ((usage?.documents ?? 0) >= (configuredLimits?.documents ?? workspaceLimits.documents))
       return problem(
         409,
         "Document quota reached",
         "Delete a document before uploading another one.",
       );
-    if ((usage?.storageBytes ?? 0) + parsed.data.bytes > workspaceLimits.storageBytes)
+    if (
+      (usage?.storageBytes ?? 0) + parsed.data.bytes >
+      (configuredLimits?.storageBytes ?? workspaceLimits.storageBytes)
+    )
       return problem(
         409,
         "Storage quota reached",
@@ -299,6 +408,12 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "documents" && request.method === "DELETE" && path[1]) {
     if (!can(actor.role, "documents:delete")) return forbidden("documents:delete");
+    if (actor.isDemo && path[1] === "doc_handbook")
+      return problem(
+        403,
+        "Demo fixture protected",
+        "The sample handbook stays available for every demo visitor.",
+      );
     const document = await env.DB.prepare(
       `SELECT d.id,d.current_version_id AS versionId,v.r2_key AS r2Key
        FROM document d LEFT JOIN document_version v ON v.id=d.current_version_id
@@ -454,6 +569,8 @@ async function route(request: Request, path: string[]): Promise<Response> {
     if (!allowed.length) return Response.json({ data: [] });
     const result = await env.DB.prepare(
       `SELECT c.id,c.name,c.description,c.color,c.restricted,COUNT(d.id) AS documentCount
+              ,COALESCE((SELECT json_group_array(cm.member_id) FROM collection_member cm
+                         WHERE cm.organization_id=c.organization_id AND cm.collection_id=c.id),'[]') AS memberIds
        FROM collection c LEFT JOIN document d ON d.collection_id=c.id AND d.deleted_at IS NULL
        WHERE c.organization_id=? AND c.deleted_at IS NULL AND c.id IN (${allowed.map(() => "?").join(",")})
        GROUP BY c.id ORDER BY c.name`,
@@ -475,13 +592,14 @@ async function route(request: Request, path: string[]): Promise<Response> {
     const collectionId = crypto.randomUUID();
     const now = Date.now();
     await env.DB.prepare(
-      "INSERT INTO collection(id,organization_id,name,description,restricted,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+      "INSERT INTO collection(id,organization_id,name,description,color,restricted,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
     )
       .bind(
         collectionId,
         actor.organizationId,
         parsed.data.name,
         parsed.data.description ?? null,
+        parsed.data.color,
         parsed.data.restricted ? 1 : 0,
         actor.userId,
         now,
@@ -492,6 +610,130 @@ async function route(request: Request, path: string[]): Promise<Response> {
       name: parsed.data.name,
     });
     return Response.json({ id: collectionId }, { status: 201 });
+  }
+
+  if (path[0] === "collections" && path[1] && request.method === "PATCH") {
+    if (!can(actor.role, "workspace:update")) return forbidden("workspace:update");
+    if (actor.isDemo && path[1] === "col_product")
+      return problem(
+        403,
+        "Demo fixture protected",
+        "The sample collection stays available for every demo visitor.",
+      );
+    const parsed = collectionUpdateSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success)
+      return problem(
+        422,
+        "Invalid collection",
+        parsed.error.issues[0]?.message ?? "Invalid payload.",
+      );
+    const existing = await env.DB.prepare(
+      "SELECT id FROM collection WHERE id=? AND organization_id=? AND deleted_at IS NULL",
+    )
+      .bind(path[1], actor.organizationId)
+      .first();
+    if (!existing) return problem(404, "Collection not found", "The collection does not exist.");
+    await env.DB.prepare(
+      `UPDATE collection SET name=COALESCE(?,name),description=COALESCE(?,description),
+       color=COALESCE(?,color),restricted=COALESCE(?,restricted),updated_at=?
+       WHERE id=? AND organization_id=?`,
+    )
+      .bind(
+        parsed.data.name ?? null,
+        parsed.data.description ?? null,
+        parsed.data.color ?? null,
+        parsed.data.restricted === undefined ? null : parsed.data.restricted ? 1 : 0,
+        Date.now(),
+        path[1],
+        actor.organizationId,
+      )
+      .run();
+    await writeAudit(env, actor, "collection.updated", "collection", path[1], parsed.data);
+    return Response.json({ data: { updated: true } });
+  }
+
+  if (path[0] === "collections" && path[1] && path[2] === "members" && request.method === "PUT") {
+    if (!can(actor.role, "members:manage")) return forbidden("members:manage");
+    const safeguarded = demoSafeguard(actor);
+    if (safeguarded) return safeguarded;
+    const parsed = collectionMembersSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success)
+      return problem(
+        422,
+        "Invalid collection members",
+        parsed.error.issues[0]?.message ?? "Invalid payload.",
+      );
+    const collection = await env.DB.prepare(
+      "SELECT id FROM collection WHERE id=? AND organization_id=? AND deleted_at IS NULL",
+    )
+      .bind(path[1], actor.organizationId)
+      .first();
+    if (!collection) return problem(404, "Collection not found", "The collection does not exist.");
+    if (parsed.data.memberIds.length) {
+      const placeholders = parsed.data.memberIds.map(() => "?").join(",");
+      const owned = await env.DB.prepare(
+        `SELECT id FROM member WHERE organization_id=? AND id IN (${placeholders})`,
+      )
+        .bind(actor.organizationId, ...parsed.data.memberIds)
+        .all<{ id: string }>();
+      if (owned.results.length !== new Set(parsed.data.memberIds).size)
+        return problem(
+          422,
+          "Invalid member",
+          "Every selected member must belong to this workspace.",
+        );
+    }
+    const now = Date.now();
+    await env.DB.prepare(
+      "DELETE FROM collection_member WHERE organization_id=? AND collection_id=?",
+    )
+      .bind(actor.organizationId, path[1])
+      .run();
+    if (parsed.data.memberIds.length)
+      await env.DB.batch(
+        [...new Set(parsed.data.memberIds)].map((memberId) =>
+          env.DB.prepare(
+            "INSERT INTO collection_member(organization_id,collection_id,member_id,created_at,updated_at) VALUES(?,?,?,?,?)",
+          ).bind(actor.organizationId, path[1], memberId, now, now),
+        ),
+      );
+    await writeAudit(env, actor, "collection.members_updated", "collection", path[1], {
+      memberCount: parsed.data.memberIds.length,
+    });
+    return Response.json({ data: { updated: true } });
+  }
+
+  if (path[0] === "collections" && path[1] && request.method === "DELETE") {
+    if (!can(actor.role, "workspace:update")) return forbidden("workspace:update");
+    if (actor.isDemo && path[1] === "col_product")
+      return problem(
+        403,
+        "Demo fixture protected",
+        "The sample collection stays available for every demo visitor.",
+      );
+    const existing = await env.DB.prepare(
+      "SELECT id FROM collection WHERE id=? AND organization_id=? AND deleted_at IS NULL",
+    )
+      .bind(path[1], actor.organizationId)
+      .first();
+    if (!existing) return problem(404, "Collection not found", "The collection does not exist.");
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE collection SET deleted_at=?,updated_at=? WHERE id=? AND organization_id=?",
+      ).bind(now, now, path[1], actor.organizationId),
+      env.DB.prepare(
+        "UPDATE document SET collection_id=NULL,updated_at=? WHERE collection_id=? AND organization_id=?",
+      ).bind(now, path[1], actor.organizationId),
+      env.DB.prepare(
+        "UPDATE chunk SET collection_id=NULL,updated_at=? WHERE collection_id=? AND organization_id=?",
+      ).bind(now, path[1], actor.organizationId),
+      env.DB.prepare(
+        "DELETE FROM collection_member WHERE collection_id=? AND organization_id=?",
+      ).bind(path[1], actor.organizationId),
+    ]);
+    await writeAudit(env, actor, "collection.deleted", "collection", path[1]);
+    return new Response(null, { status: 204 });
   }
 
   if (path[0] === "ocr" && request.method === "POST") {
@@ -599,7 +841,7 @@ async function route(request: Request, path: string[]): Promise<Response> {
   }
 
   if (path[0] === "usage" && request.method === "GET") {
-    const [documents, members] = await Promise.all([
+    const [documents, members, limits] = await Promise.all([
       env.DB.prepare(
         "SELECT COUNT(*) AS documents,COALESCE(SUM(bytes),0) AS storageBytes FROM document WHERE organization_id=? AND deleted_at IS NULL",
       )
@@ -608,15 +850,20 @@ async function route(request: Request, path: string[]): Promise<Response> {
       env.DB.prepare("SELECT COUNT(*) AS members FROM member WHERE organization_id=?")
         .bind(actor.organizationId)
         .first<{ members: number }>(),
+      env.DB.prepare(
+        "SELECT max_documents AS documentLimit,max_storage_bytes AS storageLimit,max_members AS memberLimit FROM workspace_settings WHERE organization_id=?",
+      )
+        .bind(actor.organizationId)
+        .first<{ documentLimit: number; storageLimit: number; memberLimit: number }>(),
     ]);
     return Response.json({
       data: {
         documents: documents?.documents ?? 0,
-        documentLimit: workspaceLimits.documents,
+        documentLimit: limits?.documentLimit ?? workspaceLimits.documents,
         storageBytes: documents?.storageBytes ?? 0,
-        storageLimit: workspaceLimits.storageBytes,
+        storageLimit: limits?.storageLimit ?? workspaceLimits.storageBytes,
         members: members?.members ?? 0,
-        memberLimit: workspaceLimits.members,
+        memberLimit: limits?.memberLimit ?? workspaceLimits.members,
       },
     });
   }
@@ -630,18 +877,270 @@ async function route(request: Request, path: string[]): Promise<Response> {
     )
       .bind(actor.organizationId)
       .all();
-    return Response.json({ data: result.results });
+    const invitations = can(actor.role, "members:manage")
+      ? await env.DB.prepare(
+          `SELECT id,email,role,status,expires_at AS expiresAt,created_at AS createdAt
+           FROM invitation WHERE organization_id=? AND status='pending' ORDER BY created_at DESC`,
+        )
+          .bind(actor.organizationId)
+          .all()
+      : { results: [] };
+    return Response.json({ data: result.results, invitations: invitations.results });
+  }
+
+  if (path[0] === "members" && request.method === "POST" && !path[1]) {
+    if (!can(actor.role, "members:manage")) return forbidden("members:manage");
+    const safeguarded = demoSafeguard(actor);
+    if (safeguarded) return safeguarded;
+    const parsed = invitationSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success)
+      return problem(
+        422,
+        "Invalid invitation",
+        parsed.error.issues[0]?.message ?? "Invalid payload.",
+      );
+    const limits = await env.DB.prepare(
+      `SELECT s.max_members AS maxMembers,
+              (SELECT COUNT(*) FROM member WHERE organization_id=?) AS memberCount
+       FROM workspace_settings s WHERE s.organization_id=?`,
+    )
+      .bind(actor.organizationId, actor.organizationId)
+      .first<{ maxMembers: number; memberCount: number }>();
+    if ((limits?.memberCount ?? 0) >= (limits?.maxMembers ?? workspaceLimits.members))
+      return problem(
+        409,
+        "Member limit reached",
+        "Increase the member limit before inviting anyone else.",
+      );
+    const existingMember = await env.DB.prepare(
+      `SELECT m.id FROM member m JOIN user u ON u.id=m.user_id
+       WHERE m.organization_id=? AND lower(u.email)=lower(?)`,
+    )
+      .bind(actor.organizationId, parsed.data.email)
+      .first();
+    if (existingMember) return problem(409, "Already a member", "That email already has access.");
+    const existingInvitation = await env.DB.prepare(
+      "SELECT id FROM invitation WHERE organization_id=? AND lower(email)=lower(?) AND status='pending' AND expires_at>?",
+    )
+      .bind(actor.organizationId, parsed.data.email, Date.now())
+      .first();
+    if (existingInvitation)
+      return problem(409, "Already invited", "A current invitation already exists for that email.");
+    const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "");
+    const tokenHash = await sha256(token);
+    const invitationId = crypto.randomUUID();
+    const now = Date.now();
+    const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
+    await env.DB.prepare(
+      "INSERT INTO invitation(id,organization_id,email,role,status,inviter_id,token_hash,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+    )
+      .bind(
+        invitationId,
+        actor.organizationId,
+        parsed.data.email.toLowerCase(),
+        parsed.data.role,
+        "pending",
+        actor.userId,
+        tokenHash,
+        expiresAt,
+        now,
+        now,
+      )
+      .run();
+    await writeAudit(env, actor, "invitation.created", "invitation", invitationId, {
+      email: parsed.data.email.toLowerCase(),
+      role: parsed.data.role,
+    });
+    return Response.json(
+      {
+        data: {
+          id: invitationId,
+          email: parsed.data.email.toLowerCase(),
+          role: parsed.data.role,
+          expiresAt,
+          inviteUrl: `${new URL(request.url).origin}/invite/${token}`,
+        },
+      },
+      { status: 201 },
+    );
+  }
+
+  if (path[0] === "members" && path[1] && request.method === "PATCH") {
+    if (!can(actor.role, "members:manage")) return forbidden("members:manage");
+    const safeguarded = demoSafeguard(actor);
+    if (safeguarded) return safeguarded;
+    const parsed = memberRoleSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success)
+      return problem(422, "Invalid role", parsed.error.issues[0]?.message ?? "Invalid role.");
+    const member = await env.DB.prepare(
+      "SELECT id,user_id AS userId,role FROM member WHERE id=? AND organization_id=?",
+    )
+      .bind(path[1], actor.organizationId)
+      .first<{ id: string; userId: string; role: Actor["role"] }>();
+    if (!member) return problem(404, "Member not found", "That member does not exist.");
+    if ((member.role === "owner" || parsed.data.role === "owner") && actor.role !== "owner")
+      return problem(403, "Owner required", "Only an owner can change ownership.");
+    if (member.role === "owner" && parsed.data.role !== "owner") {
+      const owners = await env.DB.prepare(
+        "SELECT COUNT(*) AS total FROM member WHERE organization_id=? AND role='owner'",
+      )
+        .bind(actor.organizationId)
+        .first<{ total: number }>();
+      if ((owners?.total ?? 0) <= 1)
+        return problem(409, "Last owner", "Promote another owner before changing this role.");
+    }
+    await env.DB.prepare("UPDATE member SET role=?,updated_at=? WHERE id=? AND organization_id=?")
+      .bind(parsed.data.role, Date.now(), member.id, actor.organizationId)
+      .run();
+    await writeAudit(env, actor, "member.role_updated", "member", member.id, {
+      role: parsed.data.role,
+    });
+    return Response.json({ data: { updated: true } });
+  }
+
+  if (path[0] === "members" && path[1] && request.method === "DELETE") {
+    if (!can(actor.role, "members:manage")) return forbidden("members:manage");
+    const safeguarded = demoSafeguard(actor);
+    if (safeguarded) return safeguarded;
+    const member = await env.DB.prepare(
+      "SELECT id,user_id AS userId,role FROM member WHERE id=? AND organization_id=?",
+    )
+      .bind(path[1], actor.organizationId)
+      .first<{ id: string; userId: string; role: Actor["role"] }>();
+    if (!member) return problem(404, "Member not found", "That member does not exist.");
+    if (member.userId === actor.userId)
+      return problem(
+        409,
+        "Cannot remove yourself",
+        "Use workspace settings to leave this workspace.",
+      );
+    if (member.role === "owner" && actor.role !== "owner")
+      return problem(403, "Owner required", "Only an owner can remove another owner.");
+    await env.DB.prepare("DELETE FROM member WHERE id=? AND organization_id=?")
+      .bind(member.id, actor.organizationId)
+      .run();
+    await writeAudit(env, actor, "member.removed", "member", member.id);
+    return new Response(null, { status: 204 });
+  }
+
+  if (path[0] === "invitations" && path[1] && request.method === "DELETE") {
+    if (!can(actor.role, "members:manage")) return forbidden("members:manage");
+    const safeguarded = demoSafeguard(actor);
+    if (safeguarded) return safeguarded;
+    const invitation = await env.DB.prepare(
+      "SELECT id FROM invitation WHERE id=? AND organization_id=? AND status='pending'",
+    )
+      .bind(path[1], actor.organizationId)
+      .first();
+    if (!invitation) return problem(404, "Invitation not found", "That invitation is not pending.");
+    await env.DB.prepare("UPDATE invitation SET status='cancelled',updated_at=? WHERE id=?")
+      .bind(Date.now(), path[1])
+      .run();
+    await writeAudit(env, actor, "invitation.cancelled", "invitation", path[1]);
+    return new Response(null, { status: 204 });
   }
 
   if (path[0] === "audit" && request.method === "GET") {
     if (!can(actor.role, "workspace:read")) return forbidden("workspace:read");
     const result = await env.DB.prepare(
-      `SELECT id,action,target_type AS targetType,target_id AS targetId,metadata_json AS metadata,created_at AS createdAt
-       FROM audit_log WHERE organization_id=? ORDER BY created_at DESC LIMIT 100`,
+      `SELECT a.id,a.action,a.target_type AS targetType,a.target_id AS targetId,
+              a.metadata_json AS metadata,a.created_at AS createdAt,
+              COALESCE(u.name,'System') AS actorName
+       FROM audit_log a LEFT JOIN user u ON u.id=a.actor_id
+       WHERE a.organization_id=? ORDER BY a.created_at DESC LIMIT 100`,
     )
       .bind(actor.organizationId)
       .all();
     return Response.json({ data: result.results });
+  }
+
+  if (path[0] === "admin" && request.method === "GET" && !path[1]) {
+    if (!actor.isPlatformAdmin)
+      return problem(
+        403,
+        "Platform administrator required",
+        "This page is limited to platform administrators.",
+      );
+    const result = await env.DB.prepare(
+      `SELECT o.id,o.name,o.slug,o.suspended_at AS suspendedAt,o.created_at AS createdAt,
+              s.max_documents AS maxDocuments,s.max_storage_bytes AS maxStorageBytes,
+              s.max_members AS maxMembers,
+              (SELECT COUNT(*) FROM member m WHERE m.organization_id=o.id) AS members,
+              (SELECT COUNT(*) FROM document d WHERE d.organization_id=o.id AND d.deleted_at IS NULL) AS documents
+       FROM organization o LEFT JOIN workspace_settings s ON s.organization_id=o.id
+       WHERE o.deleted_at IS NULL ORDER BY o.created_at DESC LIMIT 250`,
+    ).all();
+    return Response.json({
+      data: {
+        health: {
+          status: env.DB && env.AI_SERVICE ? "ok" : "degraded",
+          database: Boolean(env.DB),
+          ai: Boolean(env.AI_SERVICE),
+          storage: Boolean(env.DOCUMENTS),
+        },
+        organizations: result.results,
+      },
+    });
+  }
+
+  if (path[0] === "admin" && path[1] === "organizations" && path[2] && request.method === "PATCH") {
+    if (!actor.isPlatformAdmin)
+      return problem(
+        403,
+        "Platform administrator required",
+        "This action is limited to platform administrators.",
+      );
+    const parsed = adminOrganizationSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success)
+      return problem(
+        422,
+        "Invalid organization settings",
+        parsed.error.issues[0]?.message ?? "Invalid payload.",
+      );
+    const organization = await env.DB.prepare(
+      "SELECT id FROM organization WHERE id=? AND deleted_at IS NULL",
+    )
+      .bind(path[2])
+      .first();
+    if (!organization) return problem(404, "Workspace not found", "That workspace does not exist.");
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE organization SET suspended_at=CASE WHEN ? IS NULL THEN suspended_at WHEN ?=1 THEN ? ELSE NULL END,updated_at=? WHERE id=?",
+      ).bind(
+        parsed.data.suspended === undefined ? null : parsed.data.suspended ? 1 : 0,
+        parsed.data.suspended ? 1 : 0,
+        now,
+        now,
+        path[2],
+      ),
+      env.DB.prepare(
+        `UPDATE workspace_settings SET max_documents=COALESCE(?,max_documents),
+         max_members=COALESCE(?,max_members),max_storage_bytes=COALESCE(?,max_storage_bytes),updated_at=?
+         WHERE organization_id=?`,
+      ).bind(
+        parsed.data.maxDocuments ?? null,
+        parsed.data.maxMembers ?? null,
+        parsed.data.maxStorageBytes ?? null,
+        now,
+        path[2],
+      ),
+    ]);
+    await env.DB.prepare(
+      "INSERT INTO audit_log(id,organization_id,actor_id,action,target_type,target_id,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
+    )
+      .bind(
+        crypto.randomUUID(),
+        path[2],
+        actor.userId,
+        "platform.workspace_updated",
+        "workspace",
+        path[2],
+        JSON.stringify(parsed.data),
+        now,
+      )
+      .run();
+    return Response.json({ data: { updated: true } });
   }
 
   return problem(404, "Not found", "The requested API route does not exist.", request.url);
@@ -655,6 +1154,9 @@ export async function POST(request: Request, context: Context) {
   return route(request, (await context.params).path);
 }
 export async function PUT(request: Request, context: Context) {
+  return route(request, (await context.params).path);
+}
+export async function PATCH(request: Request, context: Context) {
   return route(request, (await context.params).path);
 }
 export async function DELETE(request: Request, context: Context) {

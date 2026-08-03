@@ -43,7 +43,8 @@ body {
 }
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 button,
@@ -411,6 +412,14 @@ button {
   border-radius: 9px;
   margin: 8px 0 20px;
 }
+.workspace-switch select {
+  width: 26px;
+  margin-left: auto;
+  border: 0;
+  color: transparent;
+  background: transparent;
+  cursor: pointer;
+}
 .workspace-logo {
   width: 28px;
   height: 28px;
@@ -680,6 +689,9 @@ button {
   color: var(--text);
   background: var(--surface-2);
 }
+.danger {
+  color: #d14f4f !important;
+}
 .icon-button:disabled,
 button:disabled {
   opacity: 0.55;
@@ -948,7 +960,8 @@ button:disabled {
   padding: 12px;
 }
 .inline-form > input[type="text"],
-.inline-form > input:not([type]) {
+.inline-form > input:not([type]),
+.inline-form > input[type="email"] {
   flex: 1;
   height: 36px;
   min-width: 160px;
@@ -957,6 +970,163 @@ button:disabled {
   padding: 0 11px;
   background: var(--surface-2);
   color: var(--text);
+}
+.inline-form select,
+.settings-form input,
+.collection-editor input,
+.collection-editor textarea,
+.collection-editor select,
+.auth-form input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--surface-2);
+}
+.inline-form select {
+  width: auto;
+}
+.auth-form {
+  display: grid;
+  gap: 13px;
+}
+.auth-form label,
+.settings-form label,
+.collection-editor > label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.auth-form .button-primary {
+  margin-top: 4px;
+}
+.auth-mode-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+}
+.invite-layout {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+}
+.invite-card {
+  width: min(480px, 100%);
+  padding: 28px;
+  display: grid;
+  gap: 18px;
+}
+.invite-card .brand {
+  margin-bottom: 22px;
+}
+.invite-card h1 {
+  margin: 0;
+  font-size: 30px;
+}
+.collection-create {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(240px, 1.4fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+.collection-create > input {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--surface-2);
+}
+.collection-create > label,
+.collection-options label,
+.collection-editor fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.management-grid,
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.collection-editor,
+.settings-form {
+  padding: 17px;
+  display: grid;
+  align-content: start;
+  gap: 13px;
+}
+.collection-editor > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.collection-editor textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+.collection-options {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.collection-options input[type="color"] {
+  width: 36px;
+  min-height: 28px;
+  padding: 2px;
+}
+.collection-editor fieldset {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+}
+.collection-editor footer,
+.settings-form footer {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.compact {
+  min-height: 31px;
+  padding: 6px 10px !important;
+  font-size: 11px !important;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+.table select {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 8px;
+  color: var(--text);
+  background: var(--surface-2);
+}
+.invite-link span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.event-row > .button-secondary {
+  margin-left: auto;
+}
+.status.failed {
+  color: #d14f4f;
 }
 .inline-form label {
   display: flex;
@@ -1109,6 +1279,11 @@ button:disabled {
   }
   .content {
     padding: 24px 18px;
+  }
+  .collection-create,
+  .management-grid,
+  .settings-grid {
+    grid-template-columns: 1fr;
   }
   .search-trigger {
     width: 190px;
