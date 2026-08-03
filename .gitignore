@@ -3,6 +3,7 @@ node_modules
 .next
 .open-next
 dist
+dist-worker
 coverage
 .wrangler
 playwright-report
