@@ -22,7 +22,7 @@ async function mockWorkspace(page: Page) {
           id: "org_kivo",
           name: "Acme Research",
           slug: "acme-research",
-          userName: "Ajay Sharma",
+          userName: "Ajay Gaur",
           userEmail: "ajay@example.com",
           role: "owner",
           demo: false,
@@ -95,7 +95,7 @@ async function mockWorkspace(page: Page) {
         data: [
           {
             id: "mem_owner",
-            name: "Ajay Sharma",
+            name: "Ajay Gaur",
             email: "ajay@example.com",
             role: "owner",
             joinedAt: Date.now() - 86_400_000,
@@ -186,7 +186,7 @@ test("workspace owners can create member invitations", async ({ page }) => {
         data: [
           {
             id: "mem_owner",
-            name: "Ajay Sharma",
+            name: "Ajay Gaur",
             email: "ajay@example.com",
             role: "owner",
             joinedAt: Date.now(),

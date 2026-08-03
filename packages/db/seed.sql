@@ -1,4 +1,4 @@
-INSERT OR IGNORE INTO user VALUES ('usr_demo','Ajay Sharma','ajay@example.com',1,NULL,NULL,unixepoch()*1000,unixepoch()*1000);
+INSERT OR IGNORE INTO user VALUES ('usr_demo','Ajay Gaur','ajay@example.com',1,NULL,NULL,unixepoch()*1000,unixepoch()*1000);
 INSERT OR IGNORE INTO organization VALUES ('org_kivo','Acme Research','acme-research',NULL,NULL,NULL,NULL,unixepoch()*1000,unixepoch()*1000);
 INSERT OR IGNORE INTO member VALUES ('mem_owner','org_kivo','usr_demo','owner',unixepoch()*1000,unixepoch()*1000);
 INSERT OR IGNORE INTO workspace_settings(organization_id,created_at,updated_at) VALUES ('org_kivo',unixepoch()*1000,unixepoch()*1000);
