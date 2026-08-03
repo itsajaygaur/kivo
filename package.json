@@ -9,12 +9,14 @@
   "scripts": {
     "build": "turbo run build",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "db:migrate:local": "wrangler d1 migrations apply kivo-db --local --persist-to .wrangler/state --config apps/web/wrangler.jsonc",
     "dev": "turbo run dev --parallel",
+    "dev:cloudflare": "pnpm --filter @kivo/web build:worker && turbo run dev:cloudflare --parallel",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "fixtures": "node scripts/generate-fixtures.mjs",
     "lint": "turbo run lint",
-    "seed": "wrangler d1 execute kivo-db --local --config apps/web/wrangler.jsonc --file=./packages/db/seed.sql",
+    "seed": "wrangler d1 execute kivo-db --local --persist-to .wrangler/state --config apps/web/wrangler.jsonc --file=./packages/db/seed.sql",
     "test": "turbo run test",
     "test:e2e": "playwright test",
     "typecheck": "turbo run typecheck"

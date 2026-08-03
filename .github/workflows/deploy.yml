@@ -33,4 +33,4 @@ jobs:
             CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
             CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
           }
-      - run: curl --fail --retry 5 https://kivo-web.workers.dev/api/v1/health
+      - run: curl --fail --retry 5 https://kivo-web.ajaypathak2527.workers.dev/api/v1/health

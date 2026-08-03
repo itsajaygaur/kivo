@@ -1,93 +1,94 @@
+"use client";
+
 import Link from "next/link";
-import { Code2, KeyRound } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, Code2, KeyRound, LoaderCircle } from "lucide-react";
 import { Logo } from "@/components/logo";
-export const metadata = { title: "Sign in" };
+import { authClient } from "@/lib/auth-client";
+
 export default function SignIn() {
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function social(provider: "google" | "github") {
+    setPending(provider);
+    setError(null);
+    const result = await authClient.signIn.social({ provider, callbackURL: "/app" });
+    if (result.error) {
+      setError(result.error.message ?? `Could not sign in with ${provider}.`);
+      setPending(null);
+    }
+  }
+
+  async function passkey() {
+    setPending("passkey");
+    setError(null);
+    const result = await authClient.signIn.passkey();
+    if (result?.error) {
+      setError(result.error.message ?? "Could not sign in with a passkey.");
+      setPending(null);
+      return;
+    }
+    window.location.assign("/app");
+  }
+
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        background: "var(--surface)",
-      }}
-    >
-      <section style={{ padding: 32, display: "flex", flexDirection: "column" }}>
+    <main className="sign-in-layout">
+      <section className="sign-in-form">
         <Logo />
-        <div style={{ maxWidth: 370, width: "100%", margin: "auto" }}>
+        <div>
           <div className="eyebrow">
             <span className="eyebrow-dot" />
             Secure workspace access
           </div>
-          <h1 style={{ fontSize: 34, letterSpacing: "-.05em", margin: "20px 0 8px" }}>
-            Welcome to Kivo
-          </h1>
-          <p className="muted" style={{ marginBottom: 28 }}>
-            Sign in to ask better questions of your team’s knowledge.
-          </p>
-          <a
+          <h1>Welcome to Kivo</h1>
+          <p className="muted">Sign in to ask better questions of your team’s knowledge.</p>
+          {error && (
+            <div className="notice error" role="alert">
+              <AlertCircle size={14} />
+              {error}
+            </div>
+          )}
+          <button
             className="button-secondary"
-            href="/api/auth/sign-in/social?provider=google"
-            style={{ width: "100%", marginBottom: 10 }}
+            onClick={() => void social("google")}
+            disabled={Boolean(pending)}
           >
-            G&nbsp;&nbsp;Continue with Google
-          </a>
-          <a
+            {pending === "google" ? <LoaderCircle size={16} /> : "G"} Continue with Google
+          </button>
+          <button
             className="button-secondary"
-            href="/api/auth/sign-in/social?provider=github"
-            style={{ width: "100%", marginBottom: 10 }}
+            onClick={() => void social("github")}
+            disabled={Boolean(pending)}
           >
-            <Code2 size={16} />
-            Continue with GitHub
-          </a>
-          <a
+            {pending === "github" ? <LoaderCircle size={16} /> : <Code2 size={16} />} Continue with
+            GitHub
+          </button>
+          <button
             className="button-secondary"
-            href="/api/auth/sign-in/passkey"
-            style={{ width: "100%" }}
+            onClick={() => void passkey()}
+            disabled={Boolean(pending)}
           >
-            <KeyRound size={16} />
-            Sign in with a passkey
-          </a>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              margin: "24px 0",
-              color: "var(--muted)",
-              fontSize: 11,
-            }}
-          >
-            <span style={{ height: 1, background: "var(--line)", flex: 1 }} />
+            {pending === "passkey" ? <LoaderCircle size={16} /> : <KeyRound size={16} />} Sign in
+            with a passkey
+          </button>
+          <div className="sign-in-divider">
+            <span />
             Portfolio preview
-            <span style={{ height: 1, background: "var(--line)", flex: 1 }} />
+            <span />
           </div>
-          <Link className="button-primary" href="/app" style={{ width: "100%" }}>
+          <Link className="button-primary" href="/app">
             Enter demo workspace
           </Link>
-          <p className="muted" style={{ fontSize: 11, textAlign: "center", marginTop: 20 }}>
-            By continuing, you agree to the Terms and Privacy Policy.
+          <p className="muted terms">
+            Demo access is available only when the deployment explicitly enables it.
           </p>
         </div>
       </section>
-      <section
-        className="noise"
-        style={{
-          background: "linear-gradient(145deg,#17152b,#292363)",
-          margin: 12,
-          borderRadius: 18,
-          padding: 60,
-          display: "flex",
-          alignItems: "flex-end",
-          color: "white",
-        }}
-      >
-        <div style={{ maxWidth: 520 }}>
-          <p style={{ fontSize: 25, lineHeight: 1.4, letterSpacing: "-.035em" }}>
-            “Kivo made our institutional memory feel less like an archive and more like a teammate
-            who shows their work.”
-          </p>
-          <p style={{ opacity: 0.6 }}>Maya Chen · Head of Product at Northstar</p>
+      <section className="sign-in-quote noise">
+        <div>
+          <p>Ask your knowledge base—and inspect exactly where every answer came from.</p>
+          <span>Private, permission-aware retrieval</span>
         </div>
       </section>
     </main>

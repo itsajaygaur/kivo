@@ -1,35 +1,98 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
-  Bot,
   CheckCircle2,
-  Clock3,
   FileText,
-  MessageSquareText,
+  HardDrive,
   Sparkles,
   Users,
   type LucideIcon,
 } from "lucide-react";
-const docs = [
-  ["Product handbook", "Markdown", "Updated 12m ago"],
-  ["Security architecture", "PDF · 28 pages", "Updated yesterday"],
-  ["Customer research synthesis", "DOCX · 3.8 MB", "Updated 2d ago"],
-  ["Incident response runbook", "Markdown", "Updated 4d ago"],
-];
-const metrics: { label: string; value: string; trend: string; Icon: LucideIcon }[] = [
-  { label: "Documents", value: "184", trend: "+12 this month", Icon: FileText },
-  { label: "Verified answers", value: "1,284", trend: "+18.4%", Icon: CheckCircle2 },
-  { label: "Questions asked", value: "2,906", trend: "+23.1%", Icon: MessageSquareText },
-  { label: "Members", value: "18 of 25", trend: "3 active now", Icon: Users },
-];
+import { api, formatBytes, formatRelativeTime } from "@/lib/api-client";
+
+type Usage = {
+  documents: number;
+  documentLimit: number;
+  storageBytes: number;
+  storageLimit: number;
+  members: number;
+  memberLimit: number;
+};
+type DocumentRow = {
+  id: string;
+  title: string;
+  filename: string;
+  status: string;
+  collectionName: string | null;
+  updatedAt: number;
+};
+type AuditRow = { id: string; action: string; targetType: string; createdAt: number };
+type Workspace = { name: string; userName: string };
+
 export default function Overview() {
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [activity, setActivity] = useState<AuditRow[]>([]);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+
+  useEffect(() => {
+    void Promise.all([
+      api<{ data: Usage }>("/usage"),
+      api<{ data: DocumentRow[] }>("/documents"),
+      api<{ data: AuditRow[] }>("/audit"),
+      api<{ data: Workspace }>("/workspace"),
+    ])
+      .then(([usageResponse, documentResponse, auditResponse, workspaceResponse]) => {
+        setUsage(usageResponse.data);
+        setDocuments(documentResponse.data);
+        setActivity(auditResponse.data);
+        setWorkspace(workspaceResponse.data);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const ready = documents.filter(({ status }) => status === "ready").length;
+  const metrics: { label: string; value: string; trend: string; Icon: LucideIcon }[] = [
+    {
+      label: "Documents",
+      value: usage ? String(usage.documents) : "—",
+      trend: usage ? `${usage.documentLimit - usage.documents} slots available` : "Loading",
+      Icon: FileText,
+    },
+    {
+      label: "Indexed",
+      value: usage ? String(ready) : "—",
+      trend: documents.some(({ status }) => status !== "ready")
+        ? "Indexing in progress"
+        : "Knowledge is current",
+      Icon: CheckCircle2,
+    },
+    {
+      label: "Storage",
+      value: usage ? formatBytes(usage.storageBytes) : "—",
+      trend: usage ? `${formatBytes(usage.storageLimit)} limit` : "Loading",
+      Icon: HardDrive,
+    },
+    {
+      label: "Members",
+      value: usage ? `${usage.members} of ${usage.memberLimit}` : "—",
+      trend: "Workspace access",
+      Icon: Users,
+    },
+  ];
+
   return (
     <div className="content">
       <div className="page-head">
         <div>
-          <h1>Good morning, Ajay</h1>
-          <p>Here’s what’s happening across Acme Research.</p>
+          <h1>Welcome, {workspace?.userName?.split(" ")[0] ?? "there"}</h1>
+          <p>
+            {workspace ? `Here’s what’s indexed in ${workspace.name}.` : "Loading your workspace…"}
+          </p>
         </div>
         <Link href="/app/chat" className="button-primary">
           <Sparkles size={15} />
@@ -53,46 +116,55 @@ export default function Overview() {
           <header className="panel-head">
             <h2>Recently updated</h2>
             <Link href="/app/documents" className="muted" style={{ fontSize: 11 }}>
-              View all <ArrowUpRight size={11} style={{ display: "inline" }} />
+              View all <ArrowUpRight size={11} />
             </Link>
           </header>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Document</th>
-                <th>Collection</th>
-                <th>Status</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map(([name, type, time]) => (
-                <tr key={name}>
-                  <td>
-                    <div className="doc-cell">
-                      <span className="file-icon">
-                        <FileText size={14} />
-                      </span>
-                      <div>
-                        {name}
-                        <div className="muted" style={{ fontSize: 10, fontWeight: 400 }}>
-                          {type}
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Collection</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documents.slice(0, 5).map((document) => (
+                  <tr key={document.id}>
+                    <td>
+                      <div className="doc-cell">
+                        <span className="file-icon">
+                          <FileText size={14} />
+                        </span>
+                        <div>
+                          {document.title}
+                          <div className="muted" style={{ fontSize: 10, fontWeight: 400 }}>
+                            {document.filename}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td>Product & Engineering</td>
-                  <td>
-                    <span className="status">
-                      <CheckCircle2 size={10} />
-                      Ready
-                    </span>
-                  </td>
-                  <td className="muted">{time}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td>{document.collectionName ?? "Unsorted"}</td>
+                    <td>
+                      <span className="status">
+                        {document.status === "ready" && <CheckCircle2 size={10} />}
+                        {document.status}
+                      </span>
+                    </td>
+                    <td className="muted">{formatRelativeTime(document.updatedAt)}</td>
+                  </tr>
+                ))}
+                {!documents.length && (
+                  <tr>
+                    <td colSpan={4} className="empty-cell">
+                      Upload a document to begin.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
         <section className="panel">
           <header className="panel-head">
@@ -100,41 +172,25 @@ export default function Overview() {
             <Activity size={15} className="muted" />
           </header>
           <div className="activity">
-            {[
-              ["Maya uploaded Security architecture", "12 minutes ago"],
-              ["Kivo answered 34 questions", "Today"],
-              ["Noah joined as an Editor", "Yesterday"],
-              ["Product handbook was re-indexed", "2 days ago"],
-            ].map(([text, time]) => (
-              <div className="activity-item" key={text}>
+            {activity.slice(0, 6).map((event) => (
+              <div className="activity-item" key={event.id}>
                 <span className="activity-dot" />
                 <div>
-                  {text}
+                  {event.action.replaceAll(".", " ")}
                   <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>
-                    <Clock3 size={9} style={{ display: "inline", marginRight: 4 }} />
-                    {time}
+                    {formatRelativeTime(event.createdAt)} · {event.targetType}
                   </div>
                 </div>
               </div>
             ))}
+            {!activity.length && (
+              <p className="muted" style={{ fontSize: 11, padding: 14 }}>
+                Activity will appear as your team changes the knowledge base.
+              </p>
+            )}
           </div>
         </section>
       </div>
-      <section
-        className="panel"
-        style={{ marginTop: 14, padding: 20, display: "flex", alignItems: "center", gap: 14 }}
-      >
-        <div className="feature-icon">
-          <Bot size={17} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 650 }}>Kivo found 6 questions without enough evidence</div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
-            Review gaps to decide what your knowledge base needs next.
-          </div>
-        </div>
-        <button className="button-secondary">Review gaps</button>
-      </section>
     </div>
   );
 }

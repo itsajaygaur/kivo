@@ -4,7 +4,7 @@
 
 **[Open the live Kivo demo](https://kivo-web.ajaypathak2527.workers.dev)** · [API health](https://kivo-web.ajaypathak2527.workers.dev/api/v1/health)
 
-The live demo has real D1/FTS5, Vectorize, Queues, Workers AI retrieval, and streamed generation. Its upload persistence is intentionally paused until R2 is activated on the hosting account; the API fails closed instead of silently using a paid service.
+The application uses real D1/FTS5, Vectorize, Queues, Workers AI retrieval, and streamed generation. Extracted document text can be indexed without R2; configuring the optional private R2 binding also preserves original files.
 
 ## Stack
 
@@ -19,15 +19,16 @@ Prerequisites: Node.js 24 LTS, Corepack, and a free Cloudflare account for bindi
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-cp .env.example .env.local
 pnpm --filter @kivo/ai-worker cf-typegen
 pnpm --filter @kivo/web cf-typegen
-pnpm exec wrangler d1 migrations apply kivo-db --local --config apps/web/wrangler.jsonc
+pnpm db:migrate:local
 pnpm seed
-pnpm dev
+pnpm dev:cloudflare
 ```
 
-The UI runs in demo mode by default. Use `pnpm --filter @kivo/web preview` to exercise real local Cloudflare bindings. Never use demo mode in a public deployment.
+Open `http://localhost:8787`. This command builds the OpenNext worker, starts the web and AI workers together, shares one persistent local D1 database, and uses your authenticated Cloudflare account for Workers AI. Vectorize is not emulated locally, so retrieval automatically uses FTS5; deployed environments use both retrieval paths. `pnpm dev` remains available for marketing/UI-only work without Cloudflare bindings. Never use demo mode in a public deployment.
+
+The primary workspace journeys are live: documents are extracted in the browser and persisted as chunks, queue ingestion updates status, search returns ranked passages, chat streams grounded answers with sources, and workspace/collection/member/audit/capacity screens read D1 data. OAuth/passkey access is used when `KIVO_DEMO_MODE` is disabled.
 
 ## Repository
 

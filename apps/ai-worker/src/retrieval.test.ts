@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toCitations } from "./retrieval";
+import { isCollectionAuthorized, toCitations } from "./retrieval";
 describe("citations", () => {
   it("preserves source identifiers", () => {
     expect(
@@ -19,5 +19,20 @@ describe("citations", () => {
         },
       ])[0],
     ).toMatchObject({ chunkId: "c", documentId: "d", page: 2 });
+  });
+});
+describe("collection authorization", () => {
+  it("excludes collections outside the actor grant", () => {
+    expect(isCollectionAuthorized("restricted", { authorizedCollectionIds: ["open"] })).toBe(false);
+    expect(isCollectionAuthorized("open", { authorizedCollectionIds: ["open"] })).toBe(true);
+    expect(isCollectionAuthorized(null, { authorizedCollectionIds: ["open"] })).toBe(true);
+  });
+  it("honors a narrower user-selected scope", () => {
+    expect(
+      isCollectionAuthorized("open", {
+        authorizedCollectionIds: ["open", "other"],
+        collectionIds: ["other"],
+      }),
+    ).toBe(false);
   });
 });

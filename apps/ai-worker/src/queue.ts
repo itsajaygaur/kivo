@@ -15,7 +15,18 @@ export async function processIngestion(message: IngestionMessage, env: Env): Pro
       .bind(message.organizationId, message.documentId)
       .all<{ vector_id: string }>();
     if (ids.results.length)
-      await env.VECTOR_INDEX.deleteByIds(ids.results.map(({ vector_id }) => vector_id));
+      try {
+        await env.VECTOR_INDEX.deleteByIds(ids.results.map(({ vector_id }) => vector_id));
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            level: "warn",
+            event: "vector_purge_degraded",
+            documentId: message.documentId,
+            message: error instanceof Error ? error.message : "Vectorize unavailable",
+          }),
+        );
+      }
     return;
   }
   const job = await env.DB.prepare(
@@ -34,34 +45,46 @@ export async function processIngestion(message: IngestionMessage, env: Env): Pro
   )
     .bind(message.organizationId, message.versionId)
     .all<ChunkRow>();
-  for (let offset = 0; offset < rows.results.length; offset += 25) {
-    const slice = rows.results.slice(offset, offset + 25);
-    const output = (await env.AI.run(env.EMBEDDING_MODEL as never, {
-      text: slice.map(({ content }) => content),
-    })) as { data?: number[][] };
-    await env.VECTOR_INDEX.upsert(
-      slice.map((chunk, i) => ({
-        id: chunk.id,
-        values: output.data?.[i] ?? [],
-        metadata: {
-          organizationId: message.organizationId,
-          documentId: chunk.document_id,
-          versionId: chunk.version_id,
-          collectionId: chunk.collection_id ?? "",
-          page: chunk.page ?? 0,
-        },
-      })),
-    );
-    await env.DB.prepare(
-      "UPDATE ingestion_job SET progress=?,updated_at=? WHERE id=? AND organization_id=?",
-    )
-      .bind(
-        Math.round(((offset + slice.length) / Math.max(1, rows.results.length)) * 100),
-        Date.now(),
-        message.jobId,
-        message.organizationId,
+  try {
+    for (let offset = 0; offset < rows.results.length; offset += 25) {
+      const slice = rows.results.slice(offset, offset + 25);
+      const output = (await env.AI.run(env.EMBEDDING_MODEL as never, {
+        text: slice.map(({ content }) => content),
+      })) as { data?: number[][] };
+      await env.VECTOR_INDEX.upsert(
+        slice.map((chunk, i) => ({
+          id: chunk.id,
+          values: output.data?.[i] ?? [],
+          metadata: {
+            organizationId: message.organizationId,
+            documentId: chunk.document_id,
+            versionId: chunk.version_id,
+            collectionId: chunk.collection_id ?? "",
+            page: chunk.page ?? 0,
+          },
+        })),
+      );
+      await env.DB.prepare(
+        "UPDATE ingestion_job SET progress=?,updated_at=? WHERE id=? AND organization_id=?",
       )
-      .run();
+        .bind(
+          Math.round(((offset + slice.length) / Math.max(1, rows.results.length)) * 100),
+          Date.now(),
+          message.jobId,
+          message.organizationId,
+        )
+        .run();
+    }
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        event: "vector_index_degraded",
+        jobId: message.jobId,
+        message:
+          error instanceof Error ? error.message : "Vectorize unavailable; FTS remains active",
+      }),
+    );
   }
   await env.DB.batch([
     env.DB.prepare(

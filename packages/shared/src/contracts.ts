@@ -30,6 +30,7 @@ export const searchRequestSchema = z.object({
   organizationId: z.string().min(1),
   query: z.string().trim().min(2).max(2_000),
   collectionIds: z.array(z.string()).max(50).optional(),
+  authorizedCollectionIds: z.array(z.string()).max(250).optional(),
   limit: z.number().int().min(1).max(30).default(10),
 });
 

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Activity,
   BarChart3,
@@ -21,6 +22,7 @@ import {
   Users,
 } from "lucide-react";
 import { Logo } from "./logo";
+import { api, ApiError } from "@/lib/api-client";
 const primary = [
   [/app$/, "/app", LayoutDashboard, "Overview"],
   [/documents/, "/app/documents", FileText, "Documents"],
@@ -35,6 +37,25 @@ const manage = [
 ] as const;
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
+  const router = useRouter();
+  const [workspace, setWorkspace] = useState<{
+    name: string;
+    userName: string;
+    role: string;
+  } | null>(null);
+  useEffect(() => {
+    void api<{ data: { name: string; userName: string; role: string } }>("/workspace")
+      .then(({ data }) => setWorkspace(data))
+      .catch((error) => {
+        if (error instanceof ApiError && error.status === 401) router.replace("/sign-in");
+      });
+  }, [router]);
+  const initials = (workspace?.userName ?? "Kivo User")
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
   return (
     <div className="app-layout">
       <aside className="sidebar">
@@ -42,9 +63,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <button className="workspace-switch">
           <span className="workspace-logo">AR</span>
           <div style={{ textAlign: "left", minWidth: 0 }}>
-            <div style={{ fontWeight: 650, fontSize: 12 }}>Acme Research</div>
+            <div style={{ fontWeight: 650, fontSize: 12 }}>{workspace?.name ?? "Workspace"}</div>
             <div className="muted" style={{ fontSize: 10 }}>
-              Free workspace
+              {workspace ? `${workspace.role} access` : "Loading…"}
             </div>
           </div>
           <ChevronsUpDown size={13} style={{ marginLeft: "auto" }} />
@@ -87,11 +108,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span>Help & docs</span>
           </Link>
           <div className="user-pill">
-            <span className="avatar">AS</span>
+            <span className="avatar">{initials}</span>
             <div>
-              <div style={{ fontWeight: 620, fontSize: 11 }}>Ajay Sharma</div>
+              <div style={{ fontWeight: 620, fontSize: 11 }}>
+                {workspace?.userName ?? "Kivo User"}
+              </div>
               <div className="muted" style={{ fontSize: 10 }}>
-                Owner
+                {workspace?.role ?? "Member"}
               </div>
             </div>
           </div>
@@ -99,10 +122,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <main className="app-main">
         <header className="topbar">
-          <button className="search-trigger">
+          <Link href="/app/search" className="search-trigger">
             <Search size={14} />
             Search your knowledge…<span className="kbd">⌘ K</span>
-          </button>
+          </Link>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="status">
               <span className="eyebrow-dot" />

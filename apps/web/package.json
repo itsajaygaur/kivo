@@ -8,6 +8,7 @@
     "cf-typegen": "wrangler types",
     "deploy": "opennextjs-cloudflare deploy",
     "dev": "next dev",
+    "dev:cloudflare": "wrangler dev --config wrangler.jsonc --persist-to ../../.wrangler/state --port 8787 --inspector-port 9229",
     "lint": "tsc --noEmit",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "test": "vitest run --passWithNoTests",
