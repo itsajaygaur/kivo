@@ -255,26 +255,74 @@ test("search posts a query and renders ranked evidence", async ({ page }) => {
 
 test("chat streams a grounded answer and source", async ({ page }) => {
   await mockWorkspace(page);
-  await page.route("**/api/v1/chat", (route) =>
-    route.fulfill({
+  const answer = [
+    "**North-star metric**",
+    "",
+    "- Weekly verified answers",
+    "- Evidence-backed decisions",
+    "",
+    ...Array.from(
+      { length: 24 },
+      (_, index) => `${index + 1}. Supporting detail ${index + 1} from the product handbook.`,
+    ),
+  ].join("\n");
+
+  await page.route("**/api/v1/chat", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
       headers: { "x-vercel-ai-ui-message-stream": "v1" },
       body: [
         'data: {"type":"start"}',
         'data: {"type":"source-document","sourceId":"chk_northstar","mediaType":"text/plain","title":"Product handbook"}',
+        'data: {"type":"source-document","sourceId":"chk_northstar_2","mediaType":"text/plain","title":"Product handbook"}',
         'data: {"type":"text-start","id":"answer"}',
-        'data: {"type":"text-delta","id":"answer","delta":"The north-star metric is weekly verified answers. [1]"}',
+        `data: ${JSON.stringify({ type: "text-delta", id: "answer", delta: answer })}`,
         'data: {"type":"text-end","id":"answer"}',
         'data: {"type":"finish"}',
         "data: [DONE]",
         "",
       ].join("\n\n"),
-    }),
-  );
+    });
+  });
   await page.goto("/app/chat");
   await page.getByRole("button", { name: "What is our north-star metric?" }).click();
   await page.getByLabel("Question").press("Enter");
+
+  await expect(page.getByText("Finding relevant evidence")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator(".thinking-state .spin").evaluate((element) => {
+        return getComputedStyle(element).animationName;
+      }),
+    )
+    .not.toBe("none");
+
   await expect(page.getByText("weekly verified answers", { exact: false })).toBeVisible();
-  await expect(page.getByText("Product handbook").first()).toBeVisible();
+  await expect(page.locator('[data-streamdown="strong"]')).toHaveText("North-star metric");
+  await expect(page.locator(".message-markdown")).not.toContainText("**");
+  await expect(page.getByText("Product handbook", { exact: true })).toHaveCount(2);
+
+  await expect
+    .poll(() =>
+      page.locator(".chat-scroll-viewport").evaluate((element) => {
+        return element.scrollHeight - element.clientHeight - element.scrollTop;
+      }),
+    )
+    .toBeLessThan(3);
+
+  await page
+    .locator(".chat-scroll-viewport")
+    .dispatchEvent("wheel", { deltaY: -1000, bubbles: true });
+  await page.locator(".chat-scroll-viewport").evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(page.getByRole("button", { name: "Scroll to latest message" })).toBeVisible();
+  await page.getByRole("button", { name: "Scroll to latest message" }).click();
+  await expect
+    .poll(() =>
+      page.locator(".chat-scroll-viewport").evaluate((element) => {
+        return element.scrollHeight - element.clientHeight - element.scrollTop;
+      }),
+    )
+    .toBeLessThan(3);
 });

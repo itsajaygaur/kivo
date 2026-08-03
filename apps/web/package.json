@@ -20,6 +20,10 @@
     "@kivo/db": "workspace:*",
     "@kivo/shared": "workspace:*",
     "@opennextjs/cloudflare": "1.20.2",
+    "@streamdown/cjk": "1.0.3",
+    "@streamdown/code": "1.1.1",
+    "@streamdown/math": "1.0.2",
+    "@streamdown/mermaid": "1.0.2",
     "ai": "7.0.48",
     "better-auth": "1.6.25",
     "clsx": "2.1.1",
@@ -30,7 +34,9 @@
     "pdfjs-dist": "6.2.108",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "streamdown": "2.5.0",
     "tailwind-merge": "3.6.0",
+    "use-stick-to-bottom": "1.1.6",
     "zod": "4.4.3"
   },
   "devDependencies": {
