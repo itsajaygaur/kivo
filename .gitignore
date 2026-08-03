@@ -1,0 +1,15 @@
+node_modules
+.turbo
+.next
+.open-next
+dist
+coverage
+.wrangler
+playwright-report
+test-results
+.env
+.env.local
+*.tsbuildinfo
+.DS_Store
+/outputs
+/work

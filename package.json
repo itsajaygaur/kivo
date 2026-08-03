@@ -1,0 +1,33 @@
+{
+  "name": "kivo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "dev": "turbo run dev --parallel",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "fixtures": "node scripts/generate-fixtures.mjs",
+    "lint": "turbo run lint",
+    "seed": "wrangler d1 execute kivo-db --local --config apps/web/wrangler.jsonc --file=./packages/db/seed.sql",
+    "test": "turbo run test",
+    "test:e2e": "playwright test",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "24.3.0",
+    "eslint": "9.32.0",
+    "fflate": "0.8.3",
+    "prettier": "3.6.2",
+    "turbo": "2.10.8",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10",
+    "wrangler": "4.118.0"
+  }
+}

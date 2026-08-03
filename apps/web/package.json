@@ -1,0 +1,45 @@
+{
+  "name": "@kivo/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "build:worker": "opennextjs-cloudflare build",
+    "cf-typegen": "wrangler types",
+    "deploy": "opennextjs-cloudflare deploy",
+    "dev": "next dev",
+    "lint": "tsc --noEmit",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "4.0.51",
+    "@better-auth/passkey": "1.6.25",
+    "@kivo/db": "workspace:*",
+    "@kivo/shared": "workspace:*",
+    "@opennextjs/cloudflare": "1.20.2",
+    "ai": "7.0.48",
+    "better-auth": "1.6.25",
+    "clsx": "2.1.1",
+    "drizzle-orm": "0.45.2",
+    "lucide-react": "1.28.0",
+    "mammoth": "1.12.0",
+    "next": "16.2.12",
+    "pdfjs-dist": "6.2.108",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "3.6.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260801.1",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10",
+    "wrangler": "4.118.0"
+  }
+}

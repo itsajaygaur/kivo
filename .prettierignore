@@ -1,0 +1,11 @@
+node_modules
+.turbo
+.next
+.open-next
+dist
+dist-worker
+.wrangler
+worker-configuration.d.ts
+pnpm-lock.yaml
+apps/web/public
+playwright-report

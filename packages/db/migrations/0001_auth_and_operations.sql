@@ -1,0 +1,18 @@
+CREATE TABLE session (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, token TEXT NOT NULL UNIQUE, ip_address TEXT, user_agent TEXT, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE, active_organization_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE INDEX session_user_idx ON session(user_id);
+CREATE TABLE account (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, provider_id TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE, access_token TEXT, refresh_token TEXT, id_token TEXT, access_token_expires_at INTEGER, refresh_token_expires_at INTEGER, scope TEXT, password TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(provider_id,account_id));
+CREATE INDEX account_user_idx ON account(user_id);
+CREATE TABLE verification (id TEXT PRIMARY KEY, identifier TEXT NOT NULL, value TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE INDEX verification_identifier_idx ON verification(identifier);
+CREATE TABLE passkey (id TEXT PRIMARY KEY, name TEXT, public_key TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE, credential_id TEXT NOT NULL UNIQUE, counter INTEGER NOT NULL, device_type TEXT NOT NULL, backed_up INTEGER NOT NULL, transports TEXT, aaguid TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE invitation (id TEXT PRIMARY KEY, organization_id TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE, email TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', inviter_id TEXT NOT NULL REFERENCES user(id), token_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE collection_member (organization_id TEXT NOT NULL, collection_id TEXT NOT NULL REFERENCES collection(id) ON DELETE CASCADE, member_id TEXT NOT NULL REFERENCES member(id) ON DELETE CASCADE, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(collection_id,member_id));
+CREATE INDEX collection_member_org_idx ON collection_member(organization_id);
+CREATE INDEX document_collection_idx ON document(organization_id,collection_id);
+CREATE INDEX version_org_idx ON document_version(organization_id,status);
+CREATE INDEX message_conversation_idx ON message(organization_id,conversation_id,created_at);
+CREATE INDEX citation_message_idx ON citation(organization_id,message_id);
+CREATE TABLE feedback (id TEXT PRIMARY KEY, organization_id TEXT NOT NULL, message_id TEXT NOT NULL REFERENCES message(id) ON DELETE CASCADE, user_id TEXT NOT NULL, rating INTEGER NOT NULL CHECK(rating IN (-1,1)), reason TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(message_id,user_id));
+CREATE INDEX api_key_org_idx ON api_key(organization_id,revoked_at);
+CREATE TABLE lifecycle_job (id TEXT PRIMARY KEY, organization_id TEXT NOT NULL, kind TEXT NOT NULL, target_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', r2_key TEXT, error TEXT, expires_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(organization_id,idempotency_key));
+CREATE INDEX lifecycle_state_idx ON lifecycle_job(state,expires_at);

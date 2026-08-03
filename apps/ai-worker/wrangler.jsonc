@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kivo-ai-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+  "vars": {
+    "EMBEDDING_MODEL": "@cf/baai/bge-m3",
+    "RERANK_MODEL": "@cf/baai/bge-reranker-base",
+    "GENERATION_MODEL": "@cf/openai/gpt-oss-20b",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kivo-db",
+      "database_id": "replace-with-d1-id",
+      "migrations_dir": "../../packages/db/migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "kivo-documents" }],
+  "vectorize": [{ "binding": "VECTOR_INDEX", "index_name": "kivo-chunks" }],
+  "ai": { "binding": "AI" },
+  "queues": {
+    "producers": [{ "binding": "INGESTION_QUEUE", "queue": "kivo-ingestion" }],
+    "consumers": [
+      {
+        "queue": "kivo-ingestion",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "kivo-ingestion-dlq",
+      },
+    ],
+  },
+  "analytics_engine_datasets": [{ "binding": "KIVO_ANALYTICS", "dataset": "kivo_events" }],
+}

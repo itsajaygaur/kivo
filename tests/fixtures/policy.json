@@ -1,0 +1,5 @@
+{
+  "incidentSeverity": "P1",
+  "acknowledgeWithinMinutes": 5,
+  "roles": ["incident commander", "communications lead", "operations lead"]
+}
