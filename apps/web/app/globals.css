@@ -470,9 +470,18 @@ button {
   margin-top: 12px;
   padding-top: 16px;
 }
+.user-pill > div:not(.avatar) {
+  min-width: 0;
+  flex: 1;
+}
+.user-pill > .icon-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
 .avatar {
   width: 29px;
   height: 29px;
+  flex: 0 0 auto;
   border-radius: 50%;
   display: grid;
   place-items: center;
