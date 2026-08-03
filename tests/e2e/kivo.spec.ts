@@ -326,3 +326,30 @@ test("chat streams a grounded answer and source", async ({ page }) => {
     )
     .toBeLessThan(3);
 });
+
+test("chat replaces a source-only reply with a recoverable message", async ({ page }) => {
+  await mockWorkspace(page);
+  await page.route("**/api/v1/chat", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      headers: { "x-vercel-ai-ui-message-stream": "v1" },
+      body: [
+        'data: {"type":"start"}',
+        'data: {"type":"source-document","sourceId":"chk_northstar","mediaType":"text/plain","title":"Product handbook"}',
+        'data: {"type":"finish"}',
+        "data: [DONE]",
+        "",
+      ].join("\n\n"),
+    }),
+  );
+
+  await page.goto("/app/chat");
+  await page.getByRole("button", { name: "What is our north-star metric?" }).click();
+  await page.getByLabel("Question").press("Enter");
+
+  await expect(page.getByText("Kivo couldn’t finish that answer.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.locator(".message.assistant .ai-orb")).toHaveCount(1);
+  await expect(page.getByText("Product handbook", { exact: true })).toHaveCount(2);
+});
