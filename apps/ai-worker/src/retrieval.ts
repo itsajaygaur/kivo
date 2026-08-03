@@ -15,6 +15,20 @@ type ChunkRow = {
   page: number | null;
   title: string;
 };
+export function isCollectionAuthorized(
+  collectionId: string | null,
+  request: Pick<SearchRequest, "authorizedCollectionIds" | "collectionIds">,
+): boolean {
+  if (
+    collectionId &&
+    request.authorizedCollectionIds &&
+    !request.authorizedCollectionIds.includes(collectionId)
+  )
+    return false;
+  if (request.collectionIds?.length)
+    return Boolean(collectionId && request.collectionIds.includes(collectionId));
+  return true;
+}
 async function embed(env: Env, text: string): Promise<number[]> {
   const result = (await env.AI.run(env.EMBEDDING_MODEL as never, { text: [text] })) as {
     data?: number[][];
@@ -23,11 +37,17 @@ async function embed(env: Env, text: string): Promise<number[]> {
   return result.data[0];
 }
 export async function retrieve(env: Env, request: SearchRequest): Promise<RankedChunk[]> {
-  const vectorResult = await env.VECTOR_INDEX.query(await embed(env, request.query), {
-    topK: 30,
-    returnMetadata: "all",
-    filter: { organizationId: request.organizationId },
-  });
+  let vectorMatches: VectorMatch[] = [];
+  try {
+    const vectorResult = await env.VECTOR_INDEX.query(await embed(env, request.query), {
+      topK: 20,
+      returnMetadata: "all",
+      filter: { organizationId: request.organizationId },
+    });
+    vectorMatches = vectorResult.matches as VectorMatch[];
+  } catch {
+    /* FTS remains available when Vectorize or embeddings are unavailable locally. */
+  }
   const words = request.query
     .replace(/["'*:()]/g, " ")
     .trim()
@@ -43,7 +63,7 @@ export async function retrieve(env: Env, request: SearchRequest): Promise<Ranked
         .all<{ id: string; rank: number }>()
     : { results: [] };
   const fused = reciprocalRankFusion([
-    (vectorResult.matches as VectorMatch[]).map(({ id }) => ({ id })),
+    vectorMatches.map(({ id }) => ({ id })),
     (fts.results ?? []).map(({ id }) => ({ id })),
   ]).slice(0, 20);
   if (!fused.length) return [];
@@ -55,12 +75,7 @@ export async function retrieve(env: Env, request: SearchRequest): Promise<Ranked
   const byId = new Map((rows.results ?? []).map((row) => [row.id, row]));
   let candidates = fused.flatMap((item, rank) => {
     const row = byId.get(item.id);
-    if (
-      !row ||
-      (request.collectionIds?.length &&
-        (!row.collection_id || !request.collectionIds.includes(row.collection_id)))
-    )
-      return [];
+    if (!row || !isCollectionAuthorized(row.collection_id, request)) return [];
     return [
       {
         id: row.id,

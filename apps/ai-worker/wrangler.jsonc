@@ -20,7 +20,7 @@
     },
   ],
   "vectorize": [{ "binding": "VECTOR_INDEX", "index_name": "kivo-chunks" }],
-  "ai": { "binding": "AI" },
+  "ai": { "binding": "AI", "remote": true },
   "queues": {
     "producers": [{ "binding": "INGESTION_QUEUE", "queue": "kivo-ingestion" }],
     "consumers": [

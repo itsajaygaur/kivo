@@ -2,9 +2,9 @@
 
 **Answers grounded in your knowledge.** Kivo is a production-oriented, multi-tenant AI knowledge base built on Cloudflare. It ingests private documents, enforces collection permissions before retrieval, combines Vectorize and FTS5 results, reranks evidence, and streams cited answers.
 
-**[Open the live Kivo demo](https://kivo-web.ajaypathak2527.workers.dev)** · [API health](https://kivo-web.ajaypathak2527.workers.dev/api/v1/health)
+**[Open the live Kivo demo](https://kivo-web.ajaypathak2527.workers.dev/demo)** · [Create an account](https://kivo-web.ajaypathak2527.workers.dev/sign-in) · [API health](https://kivo-web.ajaypathak2527.workers.dev/api/v1/health)
 
-The live demo has real D1/FTS5, Vectorize, Queues, Workers AI retrieval, and streamed generation. Its upload persistence is intentionally paused until R2 is activated on the hosting account; the API fails closed instead of silently using a paid service.
+The application uses real D1/FTS5, Vectorize, Queues, Workers AI retrieval, and streamed generation. Extracted document text can be indexed without R2; configuring the optional private R2 binding also preserves original files.
 
 ## Stack
 
@@ -19,15 +19,17 @@ Prerequisites: Node.js 24 LTS, Corepack, and a free Cloudflare account for bindi
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-cp .env.example .env.local
+cp .env.example apps/web/.dev.vars
 pnpm --filter @kivo/ai-worker cf-typegen
 pnpm --filter @kivo/web cf-typegen
-pnpm exec wrangler d1 migrations apply kivo-db --local --config apps/web/wrangler.jsonc
+pnpm db:migrate:local
 pnpm seed
-pnpm dev
+pnpm dev:cloudflare
 ```
 
-The UI runs in demo mode by default. Use `pnpm --filter @kivo/web preview` to exercise real local Cloudflare bindings. Never use demo mode in a public deployment.
+Open `http://127.0.0.1:8787`. This command builds the OpenNext worker, starts the web and AI workers together, shares one persistent local D1 database, and uses your authenticated Cloudflare account for Workers AI. Vectorize is not emulated locally, so retrieval automatically uses FTS5; deployed environments use both retrieval paths. `pnpm dev` remains available for marketing/UI-only work without Cloudflare bindings. Keep `.dev.vars` private.
+
+The primary workspace journeys are live: email/password authentication, optional OAuth and passkeys, account onboarding, workspace switching, member invitation links and roles, collection access lists, editable retention settings, audit history, platform quotas/suspension, document ingestion, hybrid search, and grounded streamed chat. `KIVO_DEMO_MODE=true` enables an explicit public demo session; it no longer bypasses authentication for every visitor. Shared demo visitors cannot change membership or platform settings.
 
 ## Repository
 

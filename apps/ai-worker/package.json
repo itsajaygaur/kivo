@@ -7,6 +7,7 @@
     "build": "wrangler deploy --dry-run --outdir dist",
     "cf-typegen": "wrangler types",
     "dev": "wrangler dev",
+    "dev:cloudflare": "wrangler dev --config wrangler.jsonc --persist-to ../../.wrangler/state --port 8788 --inspector-port 9230",
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
