@@ -97,7 +97,9 @@ const adminOrganizationSchema = z
     maxStorageBytes: z.number().int().min(1_048_576).max(109_951_162_777_600).optional(),
   })
   .refine((value) => Object.keys(value).length, { message: "Provide at least one change." });
-const ocrSchema = z.object({ image: z.string().min(100).max(15_000_000) });
+// Base64 page renders; capped well below the AI Worker's memory budget because the
+// vision model input must be materialized as a byte array.
+const ocrSchema = z.object({ image: z.string().min(100).max(4_000_000) });
 
 function requestId(request: Request) {
   return request.headers.get("cf-ray") ?? crypto.randomUUID();
@@ -107,14 +109,38 @@ function forbidden(permission: Permission) {
   return problem(403, "Permission denied", `Your workspace role does not grant ${permission}.`);
 }
 
-function demoSafeguard(actor: Actor) {
-  return actor.isDemo
-    ? problem(
+// Shared demo visitors are read-only: any mutation, spend-generating call, or
+// people-data read is rejected regardless of the demo actor's role.
+const demoReadableResources = new Set(["workspace", "documents", "collections", "usage"]);
+function demoSafeguard(actor: Actor, request: Request, path: string[]) {
+  if (!actor.isDemo) return null;
+  const allowed =
+    (request.method === "GET" && demoReadableResources.has(path[0] ?? "")) ||
+    (request.method === "POST" && (path[0] === "search" || path[0] === "chat"));
+  return allowed
+    ? null
+    : problem(
         403,
         "Demo safeguard",
-        "Shared demo visitors can explore documents, collections, search, and chat, but cannot change workspace access or platform settings.",
-      )
-    : null;
+        "Shared demo visitors can explore documents, collections, search, and chat, but cannot change or administer this workspace.",
+      );
+}
+
+function aiServiceCall(env: Env, pathname: string, payload: unknown): Promise<Response> | Response {
+  if (!env.INTERNAL_SERVICE_TOKEN)
+    return problem(
+      503,
+      "AI service unavailable",
+      "INTERNAL_SERVICE_TOKEN is not configured for this deployment.",
+    );
+  return env.AI_SERVICE.fetch(`https://ai.internal${pathname}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-kivo-service-token": env.INTERNAL_SERVICE_TOKEN,
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 async function accessibleCollectionIds(env: Env, actor: Actor): Promise<string[]> {
@@ -131,6 +157,40 @@ async function accessibleCollectionIds(env: Env, actor: Actor): Promise<string[]
     .bind(actor.organizationId, actor.role, actor.userId)
     .all<{ id: string }>();
   return result.results.map(({ id }) => id);
+}
+
+function usageDay(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Atomically increments a usage_daily counter and returns the new total, so
+// budget checks do not race concurrent requests.
+async function consumeDailyUsage(
+  env: Env,
+  organizationId: string,
+  column: "requests" | "ocr_pages",
+  amount = 1,
+): Promise<number> {
+  const now = Date.now();
+  const row = await env.DB.prepare(
+    `INSERT INTO usage_daily(organization_id,day,${column},created_at,updated_at) VALUES(?,?,?,?,?)
+     ON CONFLICT(organization_id,day) DO UPDATE SET ${column}=${column}+excluded.${column},updated_at=excluded.updated_at
+     RETURNING ${column} AS total`,
+  )
+    .bind(organizationId, usageDay(), amount, now, now)
+    .first<{ total: number }>();
+  return row?.total ?? amount;
+}
+
+async function dailyRequestGate(env: Env, actor: Actor): Promise<Response | null> {
+  const total = await consumeDailyUsage(env, actor.organizationId, "requests");
+  return total > workspaceLimits.requestsPerDay
+    ? problem(
+        429,
+        "Daily request limit reached",
+        "This workspace reached its daily AI request budget. Try again tomorrow.",
+      )
+    : null;
 }
 
 async function writeAudit(
@@ -193,6 +253,9 @@ async function route(request: Request, path: string[]): Promise<Response> {
     );
   }
 
+  const safeguarded = demoSafeguard(actor, request, path);
+  if (safeguarded) return safeguarded;
+
   if (path[0] === "workspace" && request.method === "GET") {
     const row = await env.DB.prepare(
       `SELECT o.id,o.name,o.slug,u.name AS userName,u.email AS userEmail,
@@ -207,6 +270,8 @@ async function route(request: Request, path: string[]): Promise<Response> {
     return Response.json({
       data: {
         ...row,
+        // The shared demo session must never surface the seeded account's identity.
+        ...(actor.isDemo ? { userName: "Demo visitor", userEmail: actor.userEmail } : {}),
         role: actor.role,
         demo: actor.isDemo,
         platformAdmin: actor.isPlatformAdmin,
@@ -216,8 +281,6 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "workspace" && request.method === "PATCH") {
     if (!can(actor.role, "workspace:update")) return forbidden("workspace:update");
-    const safeguarded = demoSafeguard(actor);
-    if (safeguarded) return safeguarded;
     const parsed = workspaceUpdateSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success)
       return problem(
@@ -295,7 +358,8 @@ async function route(request: Request, path: string[]): Promise<Response> {
     const replay = await env.DB.prepare(
       `SELECT j.document_id AS documentId,j.version_id AS versionId,j.id AS jobId,v.r2_key AS r2Key
        FROM ingestion_job j JOIN document_version v ON v.id=j.version_id
-       WHERE j.organization_id=? AND j.idempotency_key=?`,
+       JOIN document d ON d.id=j.document_id AND d.organization_id=j.organization_id
+       WHERE j.organization_id=? AND j.idempotency_key=? AND d.deleted_at IS NULL`,
     )
       .bind(actor.organizationId, idem)
       .first<{ documentId: string; versionId: string; jobId: string; r2Key: string }>();
@@ -309,16 +373,32 @@ async function route(request: Request, path: string[]): Promise<Response> {
       });
 
     const duplicate = await env.DB.prepare(
-      "SELECT id FROM document WHERE organization_id=? AND checksum=? AND deleted_at IS NULL",
+      "SELECT id,deleted_at AS deletedAt FROM document WHERE organization_id=? AND checksum=?",
     )
       .bind(actor.organizationId, parsed.data.checksum)
-      .first<{ id: string }>();
-    if (duplicate)
+      .first<{ id: string; deletedAt: number | null }>();
+    if (duplicate && !duplicate.deletedAt)
       return problem(
         409,
         "Document already exists",
         "A document with the same contents is already indexed.",
       );
+    // A trashed document still occupies the UNIQUE(organization_id,checksum) slot;
+    // hard-delete it (cascading to versions, chunks, and FTS rows) so re-uploading
+    // a previously deleted file succeeds instead of hitting a constraint error.
+    // ingestion_job rows carry no cascading foreign key and hold the
+    // UNIQUE(organization_id,idempotency_key) slot, so they go explicitly.
+    if (duplicate?.deletedAt)
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM ingestion_job WHERE organization_id=? AND document_id=?").bind(
+          actor.organizationId,
+          duplicate.id,
+        ),
+        env.DB.prepare("DELETE FROM document WHERE id=? AND organization_id=?").bind(
+          duplicate.id,
+          actor.organizationId,
+        ),
+      ]);
 
     const [usage, configuredLimits] = await Promise.all([
       env.DB.prepare(
@@ -408,12 +488,6 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "documents" && request.method === "DELETE" && path[1]) {
     if (!can(actor.role, "documents:delete")) return forbidden("documents:delete");
-    if (actor.isDemo && path[1] === "doc_handbook")
-      return problem(
-        403,
-        "Demo fixture protected",
-        "The sample handbook stays available for every demo visitor.",
-      );
     const document = await env.DB.prepare(
       `SELECT d.id,d.current_version_id AS versionId,v.r2_key AS r2Key
        FROM document d LEFT JOIN document_version v ON v.id=d.current_version_id
@@ -449,13 +523,17 @@ async function route(request: Request, path: string[]): Promise<Response> {
         "The extracted text can still be indexed without R2.",
       );
     const version = await env.DB.prepare(
-      `SELECT v.r2_key AS r2Key,v.checksum,d.bytes FROM document_version v
+      `SELECT v.r2_key AS r2Key,v.checksum,v.created_at AS createdAt,d.bytes FROM document_version v
        JOIN document d ON d.id=v.document_id AND d.organization_id=v.organization_id
        WHERE v.organization_id=? AND v.document_id=? AND v.id=? AND d.deleted_at IS NULL`,
     )
       .bind(actor.organizationId, path[1], path[2])
-      .first<{ r2Key: string; checksum: string; bytes: number }>();
+      .first<{ r2Key: string; checksum: string; createdAt: number; bytes: number }>();
     if (!version) return problem(404, "Upload expired", "This upload grant is invalid or expired.");
+    // Grants advertise expiresIn: 600; enforce it instead of accepting the PUT
+    // for the lifetime of the document.
+    if (Date.now() - version.createdAt > 600_000)
+      return problem(410, "Upload expired", "This upload grant is invalid or expired.");
     const bytes = await request.arrayBuffer();
     if (bytes.byteLength !== version.bytes)
       return problem(422, "Size mismatch", "The uploaded bytes did not match the reservation.");
@@ -498,10 +576,26 @@ async function route(request: Request, path: string[]): Promise<Response> {
       );
 
     const now = Date.now();
+    // Replace the version's chunks with an explicit DELETE + INSERT: REPLACE-conflict
+    // resolution would skip the FTS delete trigger and leave stale rows searchable.
+    const previous = await env.DB.prepare(
+      "SELECT vector_id FROM chunk WHERE organization_id=? AND version_id=?",
+    )
+      .bind(actor.organizationId, parsed.data.versionId)
+      .all<{ vector_id: string }>();
+    const staleVectorIds = previous.results
+      .map(({ vector_id }) => vector_id)
+      .filter((vectorId) => {
+        const ordinal = Number(vectorId.slice(vectorId.lastIndexOf(":") + 1));
+        return !(ordinal >= 0 && ordinal < parsed.data.chunks.length);
+      });
+    await env.DB.prepare("DELETE FROM chunk WHERE organization_id=? AND version_id=?")
+      .bind(actor.organizationId, parsed.data.versionId)
+      .run();
     const statements = await Promise.all(
       parsed.data.chunks.map(async (chunk, index) =>
         env.DB.prepare(
-          "INSERT OR REPLACE INTO chunk(id,organization_id,document_id,version_id,collection_id,ordinal,content,heading,page,start_offset,end_offset,content_hash,vector_id,created_at,updated_at) VALUES(?,?,?,?,(SELECT collection_id FROM document WHERE id=? AND organization_id=?),?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO chunk(id,organization_id,document_id,version_id,collection_id,ordinal,content,heading,page,start_offset,end_offset,content_hash,vector_id,created_at,updated_at) VALUES(?,?,?,?,(SELECT collection_id FROM document WHERE id=? AND organization_id=?),?,?,?,?,?,?,?,?,?,?)",
         ).bind(
           `${parsed.data.versionId}:${index}`,
           actor.organizationId,
@@ -556,6 +650,7 @@ async function route(request: Request, path: string[]): Promise<Response> {
       versionId: parsed.data.versionId,
       jobId: job.id,
       attempt: 0,
+      ...(staleVectorIds.length ? { staleVectorIds } : {}),
     } satisfies IngestionMessage);
     await writeAudit(env, actor, "document.queued", "document", parsed.data.documentId, {
       chunks: parsed.data.chunks.length,
@@ -565,17 +660,23 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "collections" && request.method === "GET") {
     if (!can(actor.role, "documents:read")) return forbidden("documents:read");
-    const allowed = await accessibleCollectionIds(env, actor);
-    if (!allowed.length) return Response.json({ data: [] });
+    // Accessibility is evaluated inline rather than via an IN (...) list so the
+    // query stays within D1's 100-bound-parameter limit at any collection count.
     const result = await env.DB.prepare(
       `SELECT c.id,c.name,c.description,c.color,c.restricted,COUNT(d.id) AS documentCount
               ,COALESCE((SELECT json_group_array(cm.member_id) FROM collection_member cm
                          WHERE cm.organization_id=c.organization_id AND cm.collection_id=c.id),'[]') AS memberIds
-       FROM collection c LEFT JOIN document d ON d.collection_id=c.id AND d.deleted_at IS NULL
-       WHERE c.organization_id=? AND c.deleted_at IS NULL AND c.id IN (${allowed.map(() => "?").join(",")})
+       FROM collection c LEFT JOIN document d ON d.collection_id=c.id AND d.organization_id=c.organization_id AND d.deleted_at IS NULL
+       WHERE c.organization_id=? AND c.deleted_at IS NULL AND (
+         c.restricted=0 OR ? IN ('owner','admin') OR EXISTS (
+           SELECT 1 FROM collection_member cm
+           JOIN member m ON m.id=cm.member_id AND m.organization_id=cm.organization_id
+           WHERE cm.organization_id=c.organization_id AND cm.collection_id=c.id AND m.user_id=?
+         )
+       )
        GROUP BY c.id ORDER BY c.name`,
     )
-      .bind(actor.organizationId, ...allowed)
+      .bind(actor.organizationId, actor.role, actor.userId)
       .all();
     return Response.json({ data: result.results });
   }
@@ -588,6 +689,17 @@ async function route(request: Request, path: string[]): Promise<Response> {
         422,
         "Invalid collection",
         parsed.error.issues[0]?.message ?? "Invalid payload",
+      );
+    const collectionCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM collection WHERE organization_id=? AND deleted_at IS NULL",
+    )
+      .bind(actor.organizationId)
+      .first<{ total: number }>();
+    if ((collectionCount?.total ?? 0) >= workspaceLimits.collections)
+      return problem(
+        409,
+        "Collection limit reached",
+        "Delete a collection before creating another one.",
       );
     const collectionId = crypto.randomUUID();
     const now = Date.now();
@@ -614,12 +726,6 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "collections" && path[1] && request.method === "PATCH") {
     if (!can(actor.role, "workspace:update")) return forbidden("workspace:update");
-    if (actor.isDemo && path[1] === "col_product")
-      return problem(
-        403,
-        "Demo fixture protected",
-        "The sample collection stays available for every demo visitor.",
-      );
     const parsed = collectionUpdateSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success)
       return problem(
@@ -654,8 +760,6 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "collections" && path[1] && path[2] === "members" && request.method === "PUT") {
     if (!can(actor.role, "members:manage")) return forbidden("members:manage");
-    const safeguarded = demoSafeguard(actor);
-    if (safeguarded) return safeguarded;
     const parsed = collectionMembersSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success)
       return problem(
@@ -670,13 +774,20 @@ async function route(request: Request, path: string[]): Promise<Response> {
       .first();
     if (!collection) return problem(404, "Collection not found", "The collection does not exist.");
     if (parsed.data.memberIds.length) {
-      const placeholders = parsed.data.memberIds.map(() => "?").join(",");
-      const owned = await env.DB.prepare(
-        `SELECT id FROM member WHERE organization_id=? AND id IN (${placeholders})`,
-      )
-        .bind(actor.organizationId, ...parsed.data.memberIds)
-        .all<{ id: string }>();
-      if (owned.results.length !== new Set(parsed.data.memberIds).size)
+      // Validate in slices so the schema's 250-id ceiling never exceeds D1's
+      // 100-bound-parameter limit.
+      const uniqueMemberIds = [...new Set(parsed.data.memberIds)];
+      let ownedCount = 0;
+      for (let i = 0; i < uniqueMemberIds.length; i += 90) {
+        const slice = uniqueMemberIds.slice(i, i + 90);
+        const owned = await env.DB.prepare(
+          `SELECT COUNT(*) AS total FROM member WHERE organization_id=? AND id IN (${slice.map(() => "?").join(",")})`,
+        )
+          .bind(actor.organizationId, ...slice)
+          .first<{ total: number }>();
+        ownedCount += owned?.total ?? 0;
+      }
+      if (ownedCount !== uniqueMemberIds.length)
         return problem(
           422,
           "Invalid member",
@@ -705,12 +816,6 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "collections" && path[1] && request.method === "DELETE") {
     if (!can(actor.role, "workspace:update")) return forbidden("workspace:update");
-    if (actor.isDemo && path[1] === "col_product")
-      return problem(
-        403,
-        "Demo fixture protected",
-        "The sample collection stays available for every demo visitor.",
-      );
     const existing = await env.DB.prepare(
       "SELECT id FROM collection WHERE id=? AND organization_id=? AND deleted_at IS NULL",
     )
@@ -741,18 +846,27 @@ async function route(request: Request, path: string[]): Promise<Response> {
     const parsed = ocrSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success)
       return problem(422, "Invalid OCR page", parsed.error.issues[0]?.message ?? "Invalid image");
-    return env.AI_SERVICE.fetch("https://ai.internal/internal/ocr", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-kivo-service-token": env.INTERNAL_SERVICE_TOKEN ?? "",
-      },
-      body: JSON.stringify(parsed.data),
-    });
+    const monthUsage = await env.DB.prepare(
+      `SELECT COALESCE(SUM(u.ocr_pages),0) AS used,
+              (SELECT s.monthly_ocr_limit FROM workspace_settings s WHERE s.organization_id=?) AS monthlyLimit
+       FROM usage_daily u WHERE u.organization_id=? AND u.day LIKE ?`,
+    )
+      .bind(actor.organizationId, actor.organizationId, `${usageDay().slice(0, 7)}-%`)
+      .first<{ used: number; monthlyLimit: number | null }>();
+    if ((monthUsage?.used ?? 0) >= (monthUsage?.monthlyLimit ?? workspaceLimits.ocrPagesPerMonth))
+      return problem(
+        429,
+        "OCR quota reached",
+        "This workspace used its monthly OCR page budget. Scanned pages resume next month.",
+      );
+    await consumeDailyUsage(env, actor.organizationId, "ocr_pages");
+    return aiServiceCall(env, "/internal/ocr", parsed.data);
   }
 
   if (path[0] === "search" && request.method === "POST") {
     if (!can(actor.role, "chat:use")) return forbidden("chat:use");
+    const gated = await dailyRequestGate(env, actor);
+    if (gated) return gated;
     const payload = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const authorizedCollectionIds = await accessibleCollectionIds(env, actor);
     const suppliedCollectionIds = Array.isArray(payload?.collectionIds)
@@ -778,20 +892,17 @@ async function route(request: Request, path: string[]): Promise<Response> {
     });
     if (!parsed.success)
       return problem(422, "Invalid search", parsed.error.issues[0]?.message ?? "Invalid search");
-    return env.AI_SERVICE.fetch("https://ai.internal/internal/search", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-kivo-service-token": env.INTERNAL_SERVICE_TOKEN ?? "",
-      },
-      body: JSON.stringify(parsed.data),
-    });
+    return aiServiceCall(env, "/internal/search", parsed.data);
   }
 
   if (path[0] === "chat" && request.method === "POST") {
     if (!can(actor.role, "chat:use")) return forbidden("chat:use");
+    const gated = await dailyRequestGate(env, actor);
+    if (gated) return gated;
     const payload = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-    const rawMessages = Array.isArray(payload?.messages) ? payload.messages : [];
+    // Keep the most recent turns: long threads must degrade gracefully instead of
+    // failing validation once the history exceeds the contract's 50-message cap.
+    const rawMessages = (Array.isArray(payload?.messages) ? payload.messages : []).slice(-50);
     const messages = rawMessages.map((message: any) => ({
       role: message.role,
       content:
@@ -830,14 +941,7 @@ async function route(request: Request, path: string[]): Promise<Response> {
     });
     if (!parsed.success)
       return problem(422, "Invalid chat", parsed.error.issues[0]?.message ?? "Invalid chat");
-    return env.AI_SERVICE.fetch("https://ai.internal/internal/chat", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-kivo-service-token": env.INTERNAL_SERVICE_TOKEN ?? "",
-      },
-      body: JSON.stringify(parsed.data),
-    });
+    return aiServiceCall(env, "/internal/chat", parsed.data);
   }
 
   if (path[0] === "usage" && request.method === "GET") {
@@ -890,8 +994,6 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "members" && request.method === "POST" && !path[1]) {
     if (!can(actor.role, "members:manage")) return forbidden("members:manage");
-    const safeguarded = demoSafeguard(actor);
-    if (safeguarded) return safeguarded;
     const parsed = invitationSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success)
       return problem(
@@ -899,13 +1001,15 @@ async function route(request: Request, path: string[]): Promise<Response> {
         "Invalid invitation",
         parsed.error.issues[0]?.message ?? "Invalid payload.",
       );
+    // Both values are subqueries so a workspace without a settings row still
+    // yields a row and the member cap falls back to the default instead of
+    // being silently skipped.
     const limits = await env.DB.prepare(
-      `SELECT s.max_members AS maxMembers,
-              (SELECT COUNT(*) FROM member WHERE organization_id=?) AS memberCount
-       FROM workspace_settings s WHERE s.organization_id=?`,
+      `SELECT (SELECT s.max_members FROM workspace_settings s WHERE s.organization_id=?) AS maxMembers,
+              (SELECT COUNT(*) FROM member WHERE organization_id=?) AS memberCount`,
     )
       .bind(actor.organizationId, actor.organizationId)
-      .first<{ maxMembers: number; memberCount: number }>();
+      .first<{ maxMembers: number | null; memberCount: number }>();
     if ((limits?.memberCount ?? 0) >= (limits?.maxMembers ?? workspaceLimits.members))
       return problem(
         409,
@@ -967,8 +1071,6 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "members" && path[1] && request.method === "PATCH") {
     if (!can(actor.role, "members:manage")) return forbidden("members:manage");
-    const safeguarded = demoSafeguard(actor);
-    if (safeguarded) return safeguarded;
     const parsed = memberRoleSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success)
       return problem(422, "Invalid role", parsed.error.issues[0]?.message ?? "Invalid role.");
@@ -1000,8 +1102,6 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "members" && path[1] && request.method === "DELETE") {
     if (!can(actor.role, "members:manage")) return forbidden("members:manage");
-    const safeguarded = demoSafeguard(actor);
-    if (safeguarded) return safeguarded;
     const member = await env.DB.prepare(
       "SELECT id,user_id AS userId,role FROM member WHERE id=? AND organization_id=?",
     )
@@ -1025,16 +1125,16 @@ async function route(request: Request, path: string[]): Promise<Response> {
 
   if (path[0] === "invitations" && path[1] && request.method === "DELETE") {
     if (!can(actor.role, "members:manage")) return forbidden("members:manage");
-    const safeguarded = demoSafeguard(actor);
-    if (safeguarded) return safeguarded;
     const invitation = await env.DB.prepare(
       "SELECT id FROM invitation WHERE id=? AND organization_id=? AND status='pending'",
     )
       .bind(path[1], actor.organizationId)
       .first();
     if (!invitation) return problem(404, "Invitation not found", "That invitation is not pending.");
-    await env.DB.prepare("UPDATE invitation SET status='cancelled',updated_at=? WHERE id=?")
-      .bind(Date.now(), path[1])
+    await env.DB.prepare(
+      "UPDATE invitation SET status='cancelled',updated_at=? WHERE id=? AND organization_id=?",
+    )
+      .bind(Date.now(), path[1], actor.organizationId)
       .run();
     await writeAudit(env, actor, "invitation.cancelled", "invitation", path[1]);
     return new Response(null, { status: 204 });
@@ -1147,18 +1247,35 @@ async function route(request: Request, path: string[]): Promise<Response> {
 }
 
 type Context = { params: Promise<{ path: string[] }> };
+async function safeRoute(request: Request, context: Context): Promise<Response> {
+  const path = (await context.params).path;
+  try {
+    return await route(request, path);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        event: "api_request_failed",
+        path: path.join("/"),
+        method: request.method,
+        message: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+    return problem(500, "Internal error", "The request could not be completed.", request.url);
+  }
+}
 export async function GET(request: Request, context: Context) {
-  return route(request, (await context.params).path);
+  return safeRoute(request, context);
 }
 export async function POST(request: Request, context: Context) {
-  return route(request, (await context.params).path);
+  return safeRoute(request, context);
 }
 export async function PUT(request: Request, context: Context) {
-  return route(request, (await context.params).path);
+  return safeRoute(request, context);
 }
 export async function PATCH(request: Request, context: Context) {
-  return route(request, (await context.params).path);
+  return safeRoute(request, context);
 }
 export async function DELETE(request: Request, context: Context) {
-  return route(request, (await context.params).path);
+  return safeRoute(request, context);
 }

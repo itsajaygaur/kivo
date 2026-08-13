@@ -16,12 +16,14 @@ export default function Privacy() {
           <h3 style={{ color: "var(--text)" }}>Data we process</h3>
           <p>
             Account identity, workspace configuration, uploaded documents, indexed chunks,
-            conversations, citations, operational usage, and security audit events.
+            operational usage, and security audit events. Chat conversations are answered in the
+            moment and are not stored.
           </p>
           <h3 style={{ color: "var(--text)" }}>Control and deletion</h3>
           <p>
-            Deleted knowledge enters a seven-day recoverable trash period, then is purged from D1,
-            R2, and Vectorize. Audit events expire after 90 days by default.
+            Deleting a document immediately removes its stored original, its indexed text, and its
+            vectors from D1, R2, and Vectorize. Deletion is permanent — there is no recovery window.
+            Audit events are retained for the life of the workspace.
           </p>
           <h3 style={{ color: "var(--text)" }}>Telemetry</h3>
           <p>

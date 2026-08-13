@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import {
   chatRequestSchema,
   problem,
@@ -6,12 +7,34 @@ import {
   type IngestionMessage,
 } from "@kivo/shared";
 import { streamGroundedAnswer } from "./generation";
-import { processIngestion } from "./queue";
+import { markFailed, processIngestion } from "./queue";
 import { retrieve, toCitations } from "./retrieval";
+
+const ocrSchema = z.object({ image: z.string().min(100).max(4_000_000) });
+
+async function tokensMatch(expected: string, provided: string | undefined): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [expectedDigest, providedDigest] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+    crypto.subtle.digest("SHA-256", encoder.encode(provided ?? "")),
+  ]);
+  const a = new Uint8Array(expectedDigest);
+  const b = new Uint8Array(providedDigest);
+  let difference = 0;
+  for (let index = 0; index < a.length; index++) difference |= a[index]! ^ b[index]!;
+  return difference === 0;
+}
+
 const app = new Hono<{ Bindings: Env }>();
 app.use("/internal/*", async (context, next) => {
   const token = context.env.INTERNAL_SERVICE_TOKEN;
-  if (token && context.req.header("x-kivo-service-token") !== token)
+  if (!token)
+    return problem(
+      503,
+      "Service token missing",
+      "Set the INTERNAL_SERVICE_TOKEN secret on this Worker before it can serve internal traffic.",
+    );
+  if (!(await tokensMatch(token, context.req.header("x-kivo-service-token"))))
     return problem(
       401,
       "Unauthorized",
@@ -45,9 +68,17 @@ app.post("/internal/chat", async (context) => {
   return streamGroundedAnswer(context.env, parsed.data, chunks);
 });
 app.post("/internal/ocr", async (context) => {
-  const body = await context.req.json<{ image: string }>();
-  const result = await context.env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct" as never, {
-    image: [...Uint8Array.from(atob(body.image), (char) => char.charCodeAt(0))],
+  const parsed = ocrSchema.safeParse(await context.req.json().catch(() => null));
+  if (!parsed.success)
+    return problem(422, "Invalid request", parsed.error.issues[0]?.message ?? "Invalid OCR page.");
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(atob(parsed.data.image), (char) => char.charCodeAt(0));
+  } catch {
+    return problem(422, "Invalid request", "The OCR payload must be base64-encoded image bytes.");
+  }
+  const result = await context.env.AI.run(context.env.OCR_MODEL as never, {
+    image: [...bytes],
     prompt: "Transcribe this page exactly. Preserve headings and tables. Do not interpret it.",
   });
   return context.json(result);
@@ -69,6 +100,27 @@ app.onError((error, context) => {
 export default {
   fetch: app.fetch,
   async queue(batch: MessageBatch<IngestionMessage>, env: Env): Promise<void> {
+    // Messages that exhausted their retries land on the dead-letter queue; the
+    // job must be recorded as failed so documents never sit in "indexing" forever.
+    if (batch.queue === "kivo-ingestion-dlq") {
+      for (const message of batch.messages) {
+        try {
+          if (message.body?.jobId)
+            await markFailed(env, message.body, "Ingestion retries exhausted");
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              level: "error",
+              event: "dlq_mark_failed_error",
+              jobId: message.body?.jobId ?? "unknown",
+              message: error instanceof Error ? error.message : "unknown",
+            }),
+          );
+        }
+        message.ack();
+      }
+      return;
+    }
     for (const message of batch.messages)
       try {
         await processIngestion(message.body, env);
@@ -78,7 +130,8 @@ export default {
           JSON.stringify({
             level: "error",
             event: "ingestion_failed",
-            jobId: message.body.jobId,
+            jobId: (message.body as { jobId?: string } | null)?.jobId ?? "unknown",
+            attempts: message.attempts,
             message: error instanceof Error ? error.message : "unknown",
           }),
         );

@@ -5,7 +5,9 @@ export const workspaceLimits = Object.freeze({
   storageBytes: 500 * 1024 * 1024,
   chunksPerDocument: 1_000,
   members: 25,
+  collections: 200,
   ocrPagesPerMonth: 100,
+  requestsPerDay: 2_000,
 });
 export const installationCeilings = Object.freeze({
   r2Bytes: 8 * 1024 ** 3,
@@ -21,15 +23,23 @@ export type WorkspaceUsage = {
   members: number;
   ocrPages: number;
 };
+const limitByUsageKey = Object.freeze({
+  documents: "documents",
+  storageBytes: "storageBytes",
+  members: "members",
+  ocrPages: "ocrPagesPerMonth",
+} as const satisfies Record<keyof WorkspaceUsage, keyof typeof workspaceLimits>);
+
 export function quotaViolation(
   usage: WorkspaceUsage,
   addition: Partial<WorkspaceUsage>,
 ): string | null {
-  for (const key of Object.keys(workspaceLimits) as Array<keyof typeof workspaceLimits>) {
-    if (!(key in usage)) continue;
-    const used = usage[key as keyof WorkspaceUsage] ?? 0;
-    const added = addition[key as keyof WorkspaceUsage] ?? 0;
-    const limit = workspaceLimits[key];
+  // Explicit usage-to-limit pairs: the previous key-intersection loop silently
+  // skipped any limit whose name did not match a usage field (e.g. OCR pages).
+  for (const key of Object.keys(limitByUsageKey) as Array<keyof WorkspaceUsage>) {
+    const used = usage[key] ?? 0;
+    const added = addition[key] ?? 0;
+    const limit = workspaceLimits[limitByUsageKey[key]];
     if (used + added > limit) return `${key} quota exceeded`;
   }
   return null;

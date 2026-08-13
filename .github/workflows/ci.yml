@@ -1,6 +1,9 @@
 name: CI
 on: [push, pull_request]
 permissions: { contents: read }
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -12,13 +15,16 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
+      - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
       - name: Worker bundle dry run
         run: pnpm --filter @kivo/ai-worker build
-      - name: Migration verification
-        run: pnpm exec wrangler d1 migrations apply kivo-db --local --config apps/web/wrangler.jsonc
+      - name: Migration and seed verification
+        run: |
+          pnpm db:migrate:local
+          pnpm seed
   e2e:
     runs-on: ubuntu-latest
     steps:

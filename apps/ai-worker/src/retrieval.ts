@@ -38,21 +38,31 @@ async function embed(env: Env, text: string): Promise<number[]> {
 }
 export async function retrieve(env: Env, request: SearchRequest): Promise<RankedChunk[]> {
   let vectorMatches: VectorMatch[] = [];
-  try {
-    const vectorResult = await env.VECTOR_INDEX.query(await embed(env, request.query), {
-      topK: 20,
-      returnMetadata: "all",
-      filter: { organizationId: request.organizationId },
-    });
-    vectorMatches = vectorResult.matches as VectorMatch[];
-  } catch {
-    /* FTS remains available when Vectorize or embeddings are unavailable locally. */
-  }
+  if (env.VECTORIZE_MODE !== "off")
+    try {
+      const vectorResult = await env.VECTOR_INDEX.query(await embed(env, request.query), {
+        topK: 20,
+        returnMetadata: "all",
+        filter: { organizationId: request.organizationId },
+      });
+      vectorMatches = vectorResult.matches as VectorMatch[];
+    } catch (error) {
+      // FTS remains available, but a silent fallback would hide a missing
+      // metadata index or embedding outage in production indefinitely.
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          event: "vector_retrieval_degraded",
+          message: error instanceof Error ? error.message : "Vectorize unavailable",
+        }),
+      );
+    }
   const words = request.query
     .replace(/["'*:()]/g, " ")
     .trim()
     .split(/\s+/)
     .filter(Boolean)
+    .slice(0, 24)
     .map((word) => `"${word}"`)
     .join(" OR ");
   const fts = words
@@ -68,7 +78,7 @@ export async function retrieve(env: Env, request: SearchRequest): Promise<Ranked
   ]).slice(0, 20);
   if (!fused.length) return [];
   const rows = await env.DB.prepare(
-    `SELECT c.id,c.document_id,c.version_id,c.collection_id,c.content,c.page,d.title FROM chunk c JOIN document d ON d.id=c.document_id AND d.organization_id=c.organization_id WHERE c.organization_id=? AND c.id IN (${fused.map(() => "?").join(",")}) AND d.deleted_at IS NULL`,
+    `SELECT c.id,c.document_id,c.version_id,c.collection_id,c.content,c.page,d.title FROM chunk c JOIN document d ON d.id=c.document_id AND d.organization_id=c.organization_id WHERE c.organization_id=? AND c.id IN (${fused.map(() => "?").join(",")}) AND d.deleted_at IS NULL AND c.version_id=d.current_version_id`,
   )
     .bind(request.organizationId, ...fused.map(({ id }) => id))
     .all<ChunkRow>();
@@ -98,12 +108,27 @@ export async function retrieve(env: Env, request: SearchRequest): Promise<Ranked
         query: request.query,
         contexts: candidates.map(({ content }) => ({ text: content })),
       })) as { response?: Array<{ id: number; score: number }> };
-      const scores = ranked.response ?? [];
-      candidates = scores.flatMap((entry) =>
-        candidates[entry.id] ? [{ ...candidates[entry.id]!, score: entry.score }] : [],
+      const scores = Array.isArray(ranked.response) ? ranked.response : [];
+      const reranked = scores.flatMap((entry) =>
+        candidates[entry.id]
+          ? [{ ...candidates[entry.id]!, score: Math.min(1, Math.max(0, entry.score)) }]
+          : [],
       );
-    } catch {
-      /* RRF is the degradation path. */
+      // An empty or unrecognized reranker response must not wipe out the RRF
+      // candidates — that failure mode returns zero results with no error.
+      if (reranked.length) candidates = reranked;
+      else
+        console.warn(
+          JSON.stringify({ level: "warn", event: "rerank_degraded", message: "empty response" }),
+        );
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          event: "rerank_degraded",
+          message: error instanceof Error ? error.message : "reranker unavailable",
+        }),
+      );
     }
   return boundedEvidence(candidates, 24_000).slice(0, request.limit);
 }

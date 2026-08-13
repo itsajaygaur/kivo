@@ -1,4 +1,4 @@
-import { chunkText, sha256Bytes, type TextChunk } from "@kivo/shared";
+import { chunkText, normalizeText, sha256Bytes, type TextChunk } from "@kivo/shared";
 const mimeByExtension: Record<string, string> = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -140,7 +140,9 @@ export async function extractDocument(file: File): Promise<ExtractionResult> {
     if (type === "text/html") text = htmlToPlainText(text);
     if (type === "application/json") text = JSON.stringify(JSON.parse(text), null, 2);
   }
-  const normalized = text.trim();
+  // Normalize with the same transform chunkText applies internally so chunk
+  // offsets index into this exact string (page attribution depends on it).
+  const normalized = normalizeText(text);
   return {
     text: normalized,
     pages,

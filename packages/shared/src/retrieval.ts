@@ -3,12 +3,18 @@ export function reciprocalRankFusion<T extends { id: string }>(
   k = 60,
 ): Array<T & { score: number }> {
   const scores = new Map<string, { item: T; score: number }>();
-  for (const list of lists)
+  for (const list of lists) {
+    // Only the best rank per list counts: duplicate ids inside one list must not
+    // accumulate reciprocal-rank mass and outrank genuinely agreed-on results.
+    const seen = new Set<string>();
     list.forEach((item, index) => {
+      if (seen.has(item.id)) return;
+      seen.add(item.id);
       const current = scores.get(item.id) ?? { item, score: 0 };
       current.score += 1 / (k + index + 1);
       scores.set(item.id, current);
     });
+  }
   return [...scores.values()]
     .sort((a, b) => b.score - a.score)
     .map(({ item, score }) => ({ ...item, score }));

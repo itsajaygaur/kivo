@@ -53,6 +53,7 @@ function pageForOffset(text: string, offset: number): number | null {
 export function DocumentsView() {
   const [open, setOpen] = useState(false);
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionId, setCollectionId] = useState("");
   const [query, setQuery] = useState("");
@@ -65,10 +66,11 @@ export function DocumentsView() {
   const load = useCallback(async () => {
     try {
       const [documentResponse, collectionResponse] = await Promise.all([
-        api<{ data: DocumentRow[] }>("/documents"),
+        api<{ data: DocumentRow[]; nextCursor: string | null }>("/documents"),
         api<{ data: Collection[] }>("/collections"),
       ]);
       setDocuments(documentResponse.data);
+      setNextCursor(documentResponse.nextCursor ?? null);
       setCollections(collectionResponse.data);
       setError(null);
     } catch (cause) {
@@ -77,6 +79,22 @@ export function DocumentsView() {
       setLoading(false);
     }
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor) return;
+    try {
+      const response = await api<{ data: DocumentRow[]; nextCursor: string | null }>(
+        `/documents?cursor=${encodeURIComponent(nextCursor)}`,
+      );
+      setDocuments((current) => {
+        const seen = new Set(current.map(({ id }) => id));
+        return [...current, ...response.data.filter(({ id }) => !seen.has(id))];
+      });
+      setNextCursor(response.nextCursor ?? null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load more documents.");
+    }
+  }, [nextCursor]);
 
   useEffect(() => {
     void load();
@@ -101,71 +119,84 @@ export function DocumentsView() {
       : documents;
   }, [documents, query]);
 
+  async function uploadOne(file: File) {
+    setUploadStatus(`Extracting ${file.name}…`);
+    const extracted = await extractDocument(file);
+    if (extracted.needsOcr)
+      throw new Error(
+        `${file.name} appears to be scanned. OCR is not available in this deployment.`,
+      );
+    if (!extracted.chunks.length) throw new Error(`${file.name} did not contain readable text.`);
+
+    const reservation = await api<Reservation>("/documents", {
+      method: "POST",
+      headers: { "idempotency-key": `${extracted.checksum}:${file.name}` },
+      body: JSON.stringify({
+        filename: file.name,
+        title: titleFromFilename(file.name),
+        mimeType: detectMimeType(file),
+        bytes: file.size,
+        checksum: extracted.checksum,
+        collectionId: collectionId || null,
+      }),
+    });
+
+    try {
+      if (reservation.upload) {
+        setUploadStatus(`Storing ${file.name}…`);
+        const upload = await fetch(reservation.upload.url, {
+          method: "PUT",
+          headers: {
+            "content-type": detectMimeType(file),
+            "x-content-sha256": extracted.checksum,
+          },
+          body: file,
+        });
+        if (!upload.ok) {
+          const body = (await upload.json().catch(() => null)) as { detail?: string } | null;
+          throw new ApiError(body?.detail ?? "Could not store the original file.", upload.status);
+        }
+      }
+
+      setUploadStatus(`Indexing ${file.name}…`);
+      await api("/chunks", {
+        method: "POST",
+        body: JSON.stringify({
+          documentId: reservation.documentId,
+          versionId: reservation.versionId,
+          checksum: extracted.checksum,
+          pages: extracted.pages,
+          extractedCharacters: extracted.text.length,
+          chunks: extracted.chunks.map((chunk) => ({
+            ...chunk,
+            page: pageForOffset(extracted.text, chunk.startOffset),
+          })),
+        }),
+      });
+    } catch (cause) {
+      // Remove the reservation so a failed ingestion does not strand a document
+      // in "extracting" while counting against the workspace quota.
+      await api(`/documents/${reservation.documentId}`, { method: "DELETE" }).catch(() => {});
+      throw cause;
+    }
+  }
+
   async function choose(list: FileList | null) {
     if (!list?.length) return;
     setUploading(true);
     setError(null);
+    const failures: string[] = [];
     try {
-      for (const file of Array.from(list)) {
-        setUploadStatus(`Extracting ${file.name}…`);
-        const extracted = await extractDocument(file);
-        if (extracted.needsOcr)
-          throw new Error(
-            `${file.name} appears to be scanned. OCR is not available in this deployment.`,
-          );
-        if (!extracted.chunks.length)
-          throw new Error(`${file.name} did not contain readable text.`);
-
-        const reservation = await api<Reservation>("/documents", {
-          method: "POST",
-          headers: { "idempotency-key": `${extracted.checksum}:${file.name}` },
-          body: JSON.stringify({
-            filename: file.name,
-            title: titleFromFilename(file.name),
-            mimeType: detectMimeType(file),
-            bytes: file.size,
-            checksum: extracted.checksum,
-            collectionId: collectionId || null,
-          }),
-        });
-
-        if (reservation.upload) {
-          setUploadStatus(`Storing ${file.name}…`);
-          const upload = await fetch(reservation.upload.url, {
-            method: "PUT",
-            headers: {
-              "content-type": detectMimeType(file),
-              "x-content-sha256": extracted.checksum,
-            },
-            body: file,
-          });
-          if (!upload.ok) {
-            const body = (await upload.json().catch(() => null)) as { detail?: string } | null;
-            throw new ApiError(body?.detail ?? "Could not store the original file.", upload.status);
-          }
+      for (const file of Array.from(list))
+        try {
+          await uploadOne(file);
+        } catch (cause) {
+          failures.push(cause instanceof Error ? cause.message : `${file.name} failed to upload.`);
         }
-
-        setUploadStatus(`Indexing ${file.name}…`);
-        await api("/chunks", {
-          method: "POST",
-          body: JSON.stringify({
-            documentId: reservation.documentId,
-            versionId: reservation.versionId,
-            checksum: extracted.checksum,
-            pages: extracted.pages,
-            extractedCharacters: extracted.text.length,
-            chunks: extracted.chunks.map((chunk) => ({
-              ...chunk,
-              page: pageForOffset(extracted.text, chunk.startOffset),
-            })),
-          }),
-        });
-      }
-      setOpen(false);
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Upload failed.");
+      if (failures.length) setError(failures.join(" "));
+      else setOpen(false);
     } finally {
+      await load().catch(() => {});
       setUploading(false);
       setUploadStatus(null);
       if (input.current) input.current.value = "";
@@ -188,7 +219,9 @@ export function DocumentsView() {
         <div>
           <h1>Documents</h1>
           <p>
-            {loading ? "Loading knowledge…" : `${documents.length} documents in this workspace`}
+            {loading
+              ? "Loading knowledge…"
+              : `${documents.length}${nextCursor ? "+" : ""} documents in this workspace`}
           </p>
         </div>
         <button className="button-primary" onClick={() => setOpen(true)}>
@@ -283,6 +316,13 @@ export function DocumentsView() {
             )}
           </tbody>
         </table>
+        {nextCursor && (
+          <div style={{ padding: 12, textAlign: "center" }}>
+            <button className="button-secondary" onClick={() => void loadMore()}>
+              Load more documents
+            </button>
+          </div>
+        )}
       </section>
       {open && (
         <div

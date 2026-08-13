@@ -21,6 +21,7 @@ export type SessionIdentity = {
   userId: string;
   name: string;
   email: string;
+  emailVerified: boolean;
   activeOrganizationId: string | null;
 };
 
@@ -47,15 +48,18 @@ export async function getSessionIdentity(
   if (!env) return null;
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   if (!session) return null;
-  const userStatus = await env.DB.prepare("SELECT suspended_at AS suspendedAt FROM user WHERE id=?")
+  const userStatus = await env.DB.prepare(
+    "SELECT suspended_at AS suspendedAt,email_verified AS emailVerified FROM user WHERE id=?",
+  )
     .bind(session.user.id)
-    .first<{ suspendedAt: number | null }>();
+    .first<{ suspendedAt: number | null; emailVerified: number }>();
   if (!userStatus || userStatus.suspendedAt) return null;
   return {
     sessionId: session.session.id,
     userId: session.user.id,
     name: session.user.name,
     email: session.user.email,
+    emailVerified: Boolean(userStatus.emailVerified),
     activeOrganizationId: session.session.activeOrganizationId ?? null,
   };
 }
@@ -73,7 +77,7 @@ export async function requireActor(request: Request, runtime?: Env | null): Prom
         userId: "usr_demo",
         userEmail: "demo@kivo.local",
         organizationId: "org_kivo",
-        role: "owner",
+        role: "viewer",
         isDemo: true,
         isPlatformAdmin: false,
       };
@@ -97,6 +101,8 @@ export async function requireActor(request: Request, runtime?: Env | null): Prom
     userEmail: identity.email,
     ...membership,
     isDemo: false,
-    isPlatformAdmin: platformAdmin(env, identity.email),
+    // Platform admin requires a verified email: password sign-up alone must not
+    // unlock cross-tenant administration for a listed address.
+    isPlatformAdmin: identity.emailVerified && platformAdmin(env, identity.email),
   };
 }

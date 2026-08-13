@@ -311,10 +311,15 @@ export function SectionPage({ kind }: { kind: Kind }) {
 
   async function addPasskey() {
     setPending("passkey");
-    const result = await authClient.passkey.addPasskey({ name: "Kivo passkey" });
-    if (result.error) setError(result.error.message ?? "Could not register the passkey.");
-    else setNotice("Passkey registered.");
-    setPending(null);
+    try {
+      const result = await authClient.passkey.addPasskey({ name: "Kivo passkey" });
+      if (result.error) setError(result.error.message ?? "Could not register the passkey.");
+      else setNotice("Passkey registered.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not register the passkey.");
+    } finally {
+      setPending(null);
+    }
   }
 
   async function updateOrganization(id: string, changes: Record<string, unknown>) {

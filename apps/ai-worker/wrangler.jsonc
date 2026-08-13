@@ -10,6 +10,7 @@
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "RERANK_MODEL": "@cf/baai/bge-reranker-base",
     "GENERATION_MODEL": "@cf/openai/gpt-oss-20b",
+    "OCR_MODEL": "@cf/meta/llama-3.2-11b-vision-instruct",
   },
   "d1_databases": [
     {
@@ -30,6 +31,12 @@
         "max_batch_timeout": 5,
         "max_retries": 3,
         "dead_letter_queue": "kivo-ingestion-dlq",
+      },
+      {
+        "queue": "kivo-ingestion-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 30,
+        "max_retries": 1,
       },
     ],
   },
