@@ -52,6 +52,8 @@ export type IngestionMessage = {
   versionId: string;
   jobId: string;
   attempt: number;
+  /** Vector ids superseded by a re-index whose ordinals no longer exist. */
+  staleVectorIds?: string[];
 };
 
 export type RankedChunk = Citation & { content: string; collectionId: string; rank: number };

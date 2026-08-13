@@ -34,9 +34,10 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function formatBytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  if (value < 1) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"] as const;
+  const unit = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+  return `${(value / 1024 ** unit).toFixed(unit ? 1 : 0)} ${units[unit]}`;
 }
 
 export function formatRelativeTime(value: number): string {

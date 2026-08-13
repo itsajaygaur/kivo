@@ -20,6 +20,7 @@ Prerequisites: Node.js 24 LTS, Corepack, and a free Cloudflare account for bindi
 corepack enable
 pnpm install --frozen-lockfile
 cp .env.example apps/web/.dev.vars
+cp .env.example apps/ai-worker/.dev.vars
 pnpm --filter @kivo/ai-worker cf-typegen
 pnpm --filter @kivo/web cf-typegen
 pnpm db:migrate:local
@@ -27,9 +28,9 @@ pnpm seed
 pnpm dev:cloudflare
 ```
 
-Open `http://127.0.0.1:8787`. This command builds the OpenNext worker, starts the web and AI workers together, shares one persistent local D1 database, and uses your authenticated Cloudflare account for Workers AI. Vectorize is not emulated locally, so retrieval automatically uses FTS5; deployed environments use both retrieval paths. `pnpm dev` remains available for marketing/UI-only work without Cloudflare bindings. Keep `.dev.vars` private.
+Open `http://127.0.0.1:8787`. This command builds the OpenNext worker, starts the web and AI workers together, shares one persistent local D1 database, and uses your authenticated Cloudflare account for Workers AI. Both `.dev.vars` files carry the shared `INTERNAL_SERVICE_TOKEN` (service auth between the workers fails closed), and `VECTORIZE_MODE=off` makes local ingestion and retrieval use FTS5 deliberately since Vectorize is not emulated locally; deployed environments use both retrieval paths. `pnpm dev` remains available for marketing/UI-only work without Cloudflare bindings. Keep `.dev.vars` private.
 
-The primary workspace journeys are live: email/password authentication, optional OAuth and passkeys, account onboarding, workspace switching, member invitation links and roles, collection access lists, editable retention settings, audit history, platform quotas/suspension, document ingestion, hybrid search, and grounded streamed chat. `KIVO_DEMO_MODE=true` enables an explicit public demo session; it no longer bypasses authentication for every visitor. Shared demo visitors cannot change membership or platform settings.
+The primary workspace journeys are live: email/password authentication, optional OAuth and passkeys, account onboarding, workspace switching, member invitation links and roles, collection access lists, editable retention settings, audit history, platform quotas/suspension, document ingestion, hybrid search, and grounded streamed chat. `KIVO_DEMO_MODE=true` enables an explicit public demo session; it no longer bypasses authentication for every visitor. Shared demo visitors are read-only: they can browse documents, collections, and usage, and run search and chat, but cannot mutate anything, read member or audit data, or trigger OCR.
 
 ## Repository
 
@@ -43,6 +44,6 @@ docs             Architecture, operations, security and deployment guidance
 
 ## Quality gates
 
-Run `pnpm check` for formatting, types, tests, and linting; `pnpm build` for production bundles; and `pnpm test:e2e` for the browser acceptance suite. See [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
+Run `pnpm check` for formatting, type-level linting, and tests; `pnpm build` for production bundles; and `pnpm test:e2e` for the browser acceptance suite. Lint runs as `tsc --noEmit` per package (ESLint's TypeScript toolchain does not yet support the TypeScript 7 compiler this repo uses). See [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
 
 Kivo is production-quality software with fail-closed portfolio-scale quotas. Free-tier capacity is finite; exceeding an internal limit pauses the affected feature instead of enabling billing.

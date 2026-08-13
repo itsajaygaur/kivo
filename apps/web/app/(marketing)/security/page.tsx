@@ -4,10 +4,10 @@ const controls = [
   "Tenant IDs required at every repository boundary",
   "Private R2 objects with short-lived upload grants",
   "Collection authorization before retrieval and generation",
-  "AES-GCM encryption for workspace-owned model keys",
-  "Hashed API keys and invitation tokens",
+  "Fail-closed service authentication between Workers",
+  "Hashed invitation tokens and verified-email admin gating",
   "CSP, strict cookies, CSRF and origin validation",
-  "Auditable lifecycle jobs and complete scheduled purging",
+  "Immediate multi-store purging on deletion",
   "Document text treated as untrusted prompt data",
 ];
 export default function Security() {

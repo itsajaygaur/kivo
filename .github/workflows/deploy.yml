@@ -4,7 +4,9 @@ concurrency: { group: production, cancel-in-progress: false }
 permissions: { contents: read }
 jobs:
   deploy:
-    if: github.repository_owner != ''
+    # The deploy targets and health-check URL below belong to this repository's
+    # Cloudflare account; forks must configure their own before enabling deploys.
+    if: github.repository == 'itsajaygaur/kivo'
     runs-on: ubuntu-latest
     environment: production
     steps:
