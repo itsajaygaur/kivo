@@ -6,7 +6,7 @@ interface __BaseEnv_Env {
 	INGESTION_QUEUE: Queue;
 	ASSETS: Fetcher;
 	KIVO_DEMO_MODE: "true";
-	NEXT_PUBLIC_APP_URL: "https://kivo-web.ajaypathak2527.workers.dev";
+	NEXT_PUBLIC_APP_URL: "https://kivo.ajaygaur.in";
 	AI_SERVICE: Fetcher /* kivo-ai-worker */;
 }
 declare namespace Cloudflare {

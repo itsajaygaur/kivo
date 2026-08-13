@@ -8,7 +8,7 @@
   "observability": { "enabled": true, "head_sampling_rate": 0.1 },
   "vars": {
     "KIVO_DEMO_MODE": "true",
-    "NEXT_PUBLIC_APP_URL": "https://kivo-web.ajaypathak2527.workers.dev",
+    "NEXT_PUBLIC_APP_URL": "https://kivo.ajaygaur.in",
   },
   "d1_databases": [
     {
