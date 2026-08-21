@@ -80,11 +80,6 @@ button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-/* Legacy hook: now a plain paper sheet — no blur, no glassmorphism. */
-.glass {
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
 .panel {
   border: 1px solid var(--line);
   background: var(--surface);
@@ -326,6 +321,8 @@ button:disabled {
 }
 /* Overlays — the only place shadows exist. */
 dialog.dialog-sheet {
+  /* Tailwind preflight zeroes dialog margins; restore viewport centering. */
+  margin: auto;
   width: min(520px, calc(100vw - 32px));
   padding: 22px;
   border: 1px solid var(--line-strong);
@@ -379,23 +376,6 @@ dialog.dialog-sheet::backdrop {
 .field > textarea:focus {
   outline: none;
   border-color: var(--text);
-}
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgb(24 20 14 / 0.45);
-}
-.upload-dialog {
-  width: min(520px, 100%);
-  padding: 22px;
-  border: 1px solid var(--line-strong);
-  border-radius: 4px;
-  box-shadow: var(--shadow);
-  animation: sheet-in 0.16s ease-out;
 }
 .field-label {
   display: block;
@@ -569,6 +549,14 @@ dialog.dialog-sheet::backdrop {
   border: 1px solid var(--line);
   border-radius: 2px;
   background: var(--surface);
+}
+.collection-editor input[type="checkbox"],
+.collection-create input[type="checkbox"],
+.collection-options input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
 }
 .collection-editor fieldset {
   display: grid;

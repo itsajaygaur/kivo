@@ -254,8 +254,8 @@ export default function SignIn() {
                   onClick={() => void social("github")}
                   disabled={Boolean(pending)}
                 >
-                  {pending === "github" ? <Spinner size={16} /> : <Code2 size={16} />} Continue
-                  with GitHub
+                  {pending === "github" ? <Spinner size={16} /> : <Code2 size={16} />} Continue with
+                  GitHub
                 </button>
               )}
               {capabilities?.passkeys && (
@@ -264,8 +264,8 @@ export default function SignIn() {
                   onClick={() => void passkey()}
                   disabled={Boolean(pending)}
                 >
-                  {pending === "passkey" ? <Spinner size={16} /> : <KeyRound size={16} />} Sign
-                  in with a passkey
+                  {pending === "passkey" ? <Spinner size={16} /> : <KeyRound size={16} />} Sign in
+                  with a passkey
                 </button>
               )}
               {capabilities?.demo && (

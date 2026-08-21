@@ -266,7 +266,11 @@ export function DocumentsView() {
                 <td className="muted">{formatBytes(document.bytes)}</td>
                 <td>
                   <StatusStamp failed={document.status === "failed"}>
-                    {document.status === "ready" ? <CheckCircle2 size={10} /> : <Spinner size={10} />}
+                    {document.status === "ready" ? (
+                      <CheckCircle2 size={10} />
+                    ) : (
+                      <Spinner size={10} />
+                    )}
                     {document.status === "indexing"
                       ? `Indexing ${document.progress}%`
                       : document.status}

@@ -32,9 +32,7 @@ export function AnalyticsView() {
           ["Documents", usage ? `${usage.documents} / ${usage.documentLimit}` : "—"],
           [
             "Storage",
-            usage
-              ? `${formatBytes(usage.storageBytes)} / ${formatBytes(usage.storageLimit)}`
-              : "—",
+            usage ? `${formatBytes(usage.storageBytes)} / ${formatBytes(usage.storageLimit)}` : "—",
           ],
           ["Members", usage ? `${usage.members} / ${usage.memberLimit}` : "—"],
         ].map(([label, value]) => (

@@ -115,7 +115,10 @@ export function CollectionsView() {
       notice={notice}
     >
       {canManage && (
-        <form className="collection-create panel" onSubmit={(event) => void createCollection(event)}>
+        <form
+          className="collection-create panel"
+          onSubmit={(event) => void createCollection(event)}
+        >
           <input
             aria-label="Collection name"
             placeholder="New collection name"
@@ -247,7 +250,7 @@ function CollectionEditor({
           </label>
         </div>
       )}
-      {collection.restricted && !demo && canManage && (
+      {Boolean(collection.restricted) && !demo && canManage && (
         <fieldset>
           <legend>Allowed members</legend>
           {members.map((member) => (
