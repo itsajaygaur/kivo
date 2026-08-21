@@ -28,6 +28,11 @@ const features = [
     body: "Versions, collections, retention, audit history, and feedback make knowledge accountable.",
   },
 ];
+const evidence = [
+  { name: "Product handbook", page: "p. 4", score: 94 },
+  { name: "FY26 planning memo", page: "p. 11", score: 81 },
+  { name: "Metrics definitions", page: "p. 2", score: 68 },
+];
 export default function Home() {
   return (
     <main>
@@ -38,11 +43,7 @@ export default function Home() {
             <span className="eyebrow-dot" />
             Private by default · Free to deploy
           </div>
-          <h1>
-            Your knowledge,
-            <br />
-            <span>finally answerable.</span>
-          </h1>
+          <h1>Your knowledge, finally answerable.</h1>
           <p className="hero-copy">
             Kivo turns scattered documents into fast, cited answers your team can trust—without
             loosening a single permission.
@@ -60,31 +61,38 @@ export default function Home() {
             No credit card · Deploys entirely on Cloudflare&rsquo;s free tier
           </p>
         </div>
-        <figure className="record-plate" aria-label="Kivo cited answer preview">
-          <figcaption className="record-head">
-            <span>Kivo · answer record</span>
-            <span>№ 0417</span>
+        <figure className="trace" aria-label="Kivo retrieval trace preview">
+          <figcaption className="trace-rail">
+            <span>Retrieval trace</span>
+            <span>0417</span>
           </figcaption>
-          <div className="record-question">
-            <span className="record-label">Asked</span>
-            <p>What is our north-star metric, and why did we choose it?</p>
+          <div className="trace-band">
+            <span className="trace-label">Query</span>
+            <p className="trace-query">What is our north-star metric, and why did we choose it?</p>
           </div>
-          <div className="record-answer">
-            <span className="ai-orb">K</span>
-            <div>
-              <div className="answer-text">
-                Our north-star metric is <b>weekly verified answers</b>—answers opened by a teammate
-                and positively confirmed against at least one cited source. It rewards trusted
-                outcomes instead of raw chat volume. <span className="cite-mark">[1]</span>
-              </div>
-              <div className="citation-card">
-                <b>Product handbook</b> · page 4<br />
-                &ldquo;Weekly verified answers measure useful, trusted knowledge…&rdquo;
-              </div>
+          <div className="trace-band">
+            <span className="trace-label">Evidence ranked</span>
+            <div className="trace-evidence">
+              {evidence.map(({ name, page, score }, index) => (
+                <div className="evidence-row" key={name}>
+                  <span className="cite">{index + 1}</span>
+                  <span className="evidence-name">{name}</span>
+                  <span className="evidence-page">{page}</span>
+                  <span className="bar">
+                    <span style={{ width: `${score}%` }} />
+                  </span>
+                  <span className="evidence-score">{score}%</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="record-foot">
-            <span>Sources 1</span>
+          <div className="trace-answer">
+            Our north-star metric is <b>weekly verified answers</b>—answers opened by a teammate and
+            positively confirmed against at least one cited source <span className="cite">1</span>.
+            It rewards trusted outcomes instead of raw chat volume <span className="cite">2</span>.
+          </div>
+          <div className="trace-rail">
+            <span>Sources 3</span>
             <span>Confidence high</span>
             <span>Permissions enforced</span>
           </div>
@@ -92,18 +100,14 @@ export default function Home() {
       </section>
       <section className="section" id="features">
         <div className="section-kicker">A knowledge layer, not another folder</div>
-        <h2>
-          Ask less where.
-          <br />
-          Know more why.
-        </h2>
+        <h2>Ask less where. Know more why.</h2>
         <p className="section-lead">
           One secure place to ingest, retrieve, and understand the decisions behind your work.
         </p>
-        <div className="index-list">
+        <div className="spec-grid">
           {features.map(({ title, body }, index) => (
-            <article className="index-row" key={title}>
-              <span className="index-number">{String(index + 1).padStart(2, "0")}</span>
+            <article className="spec-cell" key={title}>
+              <span className="spec-index">{String(index + 1).padStart(2, "0")}</span>
               <h3>{title}</h3>
               <p>{body}</p>
             </article>
@@ -111,9 +115,7 @@ export default function Home() {
         </div>
       </section>
       <section className="section closing">
-        <h2>
-          Start your <span>working archive.</span>
-        </h2>
+        <h2>Start with a single document.</h2>
         <p className="section-lead">
           Upload a document, ask a question, and follow the citation back to its page.
         </p>

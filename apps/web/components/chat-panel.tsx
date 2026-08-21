@@ -7,6 +7,7 @@ import {
 } from "@/components/ai-elements/conversation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { KivoMark } from "@/components/logo";
 import {
   AlertCircle,
   ArrowUp,
@@ -115,7 +116,9 @@ export function ChatPanel() {
           {!messages.length ? (
             <ConversationContent className="chat-empty-shell">
               <div className="chat-empty">
-                <div className="logo-mark">K</div>
+                <div className="logo-mark">
+                  <KivoMark />
+                </div>
                 <h2>What would you like to understand?</h2>
                 <p className="muted">
                   Ask across your workspace and inspect the sources behind the answer.
@@ -146,7 +149,11 @@ export function ChatPanel() {
 
                 return (
                   <article key={message.id} className={`message ${message.role}`}>
-                    {message.role === "assistant" && <span className="ai-orb">K</span>}
+                    {message.role === "assistant" && (
+                      <span className="ai-orb">
+                        <KivoMark />
+                      </span>
+                    )}
                     <div className="message-body">
                       {text &&
                         (message.role === "assistant" ? (
@@ -222,7 +229,9 @@ export function ChatPanel() {
 
               {waitingForAnswer && (
                 <div className="message assistant thinking-state" role="status">
-                  <span className="ai-orb">K</span>
+                  <span className="ai-orb">
+                    <KivoMark />
+                  </span>
                   <div className="thinking-copy">
                     <span>
                       <span className="spin" aria-hidden="true">

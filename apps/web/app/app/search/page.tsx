@@ -7,7 +7,6 @@ import { api } from "@/lib/api-client";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Notice } from "@/components/ui/notice";
 import { Spinner } from "@/components/ui/spinner";
-import { StatusStamp } from "@/components/ui/status-stamp";
 
 type Collection = { id: string; name: string };
 type SearchResult = {
@@ -123,7 +122,12 @@ function SearchView() {
                 <span>
                   <BookOpen size={14} /> {result.title}
                 </span>
-                <StatusStamp>{Math.round(result.score * 100)}% match</StatusStamp>
+                <span className="search-score">
+                  <span className="bar">
+                    <span style={{ width: `${Math.round(result.score * 100)}%` }} />
+                  </span>
+                  <span className="mono">{Math.round(result.score * 100)}% match</span>
+                </span>
               </header>
               <p>{result.excerpt}</p>
               <div className="muted">{result.page ? `Page ${result.page}` : "Extracted text"}</div>
