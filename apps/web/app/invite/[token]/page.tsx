@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, LoaderCircle } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { api } from "@/lib/api-client";
 import { authClient } from "@/lib/auth-client";
+import { Notice } from "@/components/ui/notice";
+import { Spinner } from "@/components/ui/spinner";
 
 type Invitation = {
   email: string;
@@ -50,12 +52,8 @@ export default function InvitationPage() {
     <main className="invite-layout">
       <section className="panel invite-card">
         <Logo />
-        {error && (
-          <div className="notice error" role="alert">
-            <AlertCircle size={14} /> {error}
-          </div>
-        )}
-        {!invitation && !error && <LoaderCircle className="spin" />}
+        {error && <Notice error>{error}</Notice>}
+        {!invitation && !error && <Spinner size={18} />}
         {invitation && (
           <>
             <span className="feature-icon">
@@ -66,10 +64,10 @@ export default function InvitationPage() {
               You were invited as <b>{invitation.role}</b> using {invitation.email}.
             </p>
             {invitation.status !== "pending" || invitation.expiresAt < Date.now() ? (
-              <div className="notice error">This invitation is no longer active.</div>
+              <Notice error>This invitation is no longer active.</Notice>
             ) : signedIn ? (
               <button className="button-primary" onClick={() => void accept()} disabled={pending}>
-                {pending && <LoaderCircle size={15} />} Accept invitation
+                {pending && <Spinner size={15} />} Accept invitation
               </button>
             ) : (
               <Link className="button-primary" href={`/sign-in?returnTo=/invite/${token}`}>

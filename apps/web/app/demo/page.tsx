@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlertCircle, LoaderCircle } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { Notice } from "@/components/ui/notice";
+import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api-client";
 
 export default function DemoEntry() {
@@ -21,17 +22,14 @@ export default function DemoEntry() {
         <Logo />
         {error ? (
           <>
-            <div className="notice error">
-              <AlertCircle size={14} />
-              {error}
-            </div>
+            <Notice error>{error}</Notice>
             <Link className="button-primary" href="/sign-in">
               Sign in instead
             </Link>
           </>
         ) : (
           <>
-            <LoaderCircle className="spin" />
+            <Spinner size={18} />
             <h1>Preparing the demo…</h1>
             <p className="muted">Opening a public workspace with sample knowledge.</p>
           </>

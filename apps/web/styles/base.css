@@ -59,6 +59,29 @@ button {
 .mono {
   font-family: var(--mono);
 }
+.system-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+}
+.system-card {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  max-width: 420px;
+}
+.system-card h1 {
+  margin: 14px 0 0;
+  font-size: 30px;
+}
+.system-card .button-primary {
+  margin-top: 16px;
+}
+.logo-pulse {
+  animation: pulse 1.4s ease-in-out infinite;
+}
 .spin {
   animation: chat-spin 0.8s linear infinite;
 }
