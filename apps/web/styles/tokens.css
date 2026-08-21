@@ -1,0 +1,45 @@
+/* Kivo "Working Archive" design tokens.
+ * Paper, ink, and a single stamp-rust accent. No gradients anywhere.
+ */
+:root {
+  --bg: #f4f1ea;
+  --surface: #fbf9f3;
+  --surface-2: #ede9de;
+  --text: #211d16;
+  --muted: #6f675a;
+  --line: #ddd6c6;
+  --line-strong: #b7ad99;
+  --accent: #b23a20;
+  --accent-2: #8c2b16;
+  --success: #2f6b4f;
+  --serif: var(--font-serif), "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --sans: var(--font-sans), "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
+  --mono: var(--font-mono), "SFMono-Regular", Menlo, Consolas, ui-monospace, monospace;
+  --shadow: 0 24px 60px rgb(33 29 22 / 0.18);
+  color-scheme: light;
+}
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-muted: var(--surface-2);
+  --color-muted-foreground: var(--muted);
+  --color-primary: var(--accent);
+  --color-primary-foreground: #fdfbf5;
+  --color-border: var(--line);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171310;
+    --surface: #1e1914;
+    --surface-2: #28221a;
+    --text: #ebe4d5;
+    --muted: #a29886;
+    --line: #383023;
+    --line-strong: #5c5140;
+    --accent: #d96e4c;
+    --accent-2: #e8926f;
+    --success: #74b090;
+    --shadow: 0 24px 60px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
