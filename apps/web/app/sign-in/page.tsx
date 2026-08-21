@@ -292,7 +292,20 @@ export default function SignIn() {
       <section className="sign-in-quote">
         <div>
           <p>Ask your knowledge base—and inspect exactly where every answer came from.</p>
-          <span>Private, permission-aware retrieval</span>
+          <div className="sign-in-specs">
+            <div>
+              <span className="cite">1</span> Permissions enforced before retrieval, not after
+            </div>
+            <div>
+              <span className="cite">2</span> Every claim traced to a page in a source you own
+            </div>
+            <div>
+              <span className="cite">3</span> Deletion purges D1, R2, and Vectorize together
+            </div>
+          </div>
+          <p style={{ margin: 0 }}>
+            <span>Private, permission-aware retrieval</span>
+          </p>
         </div>
       </section>
     </main>

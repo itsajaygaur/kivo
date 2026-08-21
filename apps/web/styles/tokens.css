@@ -1,45 +1,112 @@
-/* Kivo "Working Archive" design tokens.
- * Paper, ink, and a single stamp-rust accent. No gradients anywhere.
+/* Kivo "Signal" design tokens.
+ * A precision instrument: cool achromatic neutrals, near-black ink, and one
+ * electric signal blue reserved for marks and state. No gradients, no glows,
+ * no blurs. Depth is hairlines, never elevation — shadows exist only on overlays.
  */
+
+/* --- Light: the default surface --------------------------------------- */
 :root {
-  --bg: #f4f1ea;
-  --surface: #fbf9f3;
-  --surface-2: #ede9de;
-  --text: #211d16;
-  --muted: #6f675a;
-  --line: #ddd6c6;
-  --line-strong: #b7ad99;
-  --accent: #b23a20;
-  --accent-2: #8c2b16;
-  --success: #2f6b4f;
-  --serif: var(--font-serif), "Iowan Old Style", Georgia, "Times New Roman", serif;
-  --sans: var(--font-sans), "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
-  --mono: var(--font-mono), "SFMono-Regular", Menlo, Consolas, ui-monospace, monospace;
-  --shadow: 0 24px 60px rgb(33 29 22 / 0.18);
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eceff3;
+  --text: #0b0d10;
+  --muted: #5c6672;
+  --line: #e3e7ec;
+  --line-strong: #c4cad3;
+  --signal: #1f3bff;
+  --success: #0e7c52;
+  --danger: #cf222e;
+  --on-solid: #ffffff;
+  --backdrop: rgb(11 13 16 / 0.5);
+  --shadow: 0 24px 64px rgb(11 13 16 / 0.14);
   color-scheme: light;
 }
+
+/* --- Dark: same structure, inverted values ---------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --surface-2: #191d23;
+    --text: #e8ebef;
+    --muted: #8d97a3;
+    --line: #212730;
+    --line-strong: #39414d;
+    --signal: #7d9bff;
+    --success: #45c08a;
+    --danger: #ff6b6b;
+    --on-solid: #ffffff;
+    --backdrop: rgb(0 0 0 / 0.6);
+    --shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+    color-scheme: dark;
+  }
+}
+
+/* Explicit override wins in both directions, so a manual toggle only has to
+ * set data-theme on <html>. No toggle ships today; the hook is here for one. */
+:root[data-theme="dark"] {
+  --bg: #0a0c0f;
+  --surface: #111418;
+  --surface-2: #191d23;
+  --text: #e8ebef;
+  --muted: #8d97a3;
+  --line: #212730;
+  --line-strong: #39414d;
+  --signal: #7d9bff;
+  --success: #45c08a;
+  --danger: #ff6b6b;
+  --on-solid: #ffffff;
+  --backdrop: rgb(0 0 0 / 0.6);
+  --shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+  color-scheme: dark;
+}
+
+/* --- Scales: theme-independent ---------------------------------------- */
+:root {
+  /* Type. Martian Mono carries every uppercase micro-label; it is wide by
+   * design, so code blocks use the system stack instead and download nothing. */
+  --sans: var(--font-sans), "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
+  --mono: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --code: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Radius. Structure is square; only controls and panels are eased. */
+  --r-0: 0;
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 6px;
+  --r-full: 999px;
+
+  /* Spacing, 4px base. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --s-9: 96px;
+  --s-10: 128px;
+
+  /* Motion. Sharp deceleration — instrument, not bounce. */
+  --dur-1: 100ms;
+  --dur-2: 160ms;
+  --dur-3: 240ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Layout grid. */
+  --page: 1200px;
+  --gutter: 24px;
+}
+
+/* Bridge for vendored streamdown markup, which emits Tailwind colour classes. */
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--text);
   --color-muted: var(--surface-2);
   --color-muted-foreground: var(--muted);
-  --color-primary: var(--accent);
-  --color-primary-foreground: #fdfbf5;
+  --color-primary: var(--signal);
+  --color-primary-foreground: var(--on-solid);
   --color-border: var(--line);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #171310;
-    --surface: #1e1914;
-    --surface-2: #28221a;
-    --text: #ebe4d5;
-    --muted: #a29886;
-    --line: #383023;
-    --line-strong: #5c5140;
-    --accent: #d96e4c;
-    --accent-2: #e8926f;
-    --success: #74b090;
-    --shadow: 0 24px 60px rgb(0 0 0 / 0.5);
-    color-scheme: dark;
-  }
 }

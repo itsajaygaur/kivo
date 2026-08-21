@@ -1,4 +1,4 @@
-/* Dashboard ledger */
+/* Dashboard ledger: an instrument readout — mono values on hairline rules. */
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -19,22 +19,27 @@
   justify-content: space-between;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
+  font-variant-ligatures: none;
 }
 .metric-value {
   font-family: var(--mono);
-  font-size: 27px;
+  font-size: 24px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   margin-top: 14px;
+  font-variant-ligatures: none;
 }
+/* Captions, not verdicts — green is reserved for genuine positive status. */
 .trend {
-  color: var(--success);
+  color: var(--muted);
   font-family: var(--mono);
-  font-size: 10.5px;
-  margin-top: 4px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  margin-top: 5px;
+  font-variant-ligatures: none;
 }
 .dashboard-grid {
   display: grid;
@@ -59,8 +64,10 @@
 }
 .activity-meta {
   font-family: var(--mono);
-  font-size: 10px;
-  margin-top: 2px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  margin-top: 3px;
+  font-variant-ligatures: none;
 }
 .activity-empty {
   font-size: 11.5px;
@@ -71,19 +78,20 @@
   align-items: center;
   gap: 3px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
+  font-variant-ligatures: none;
 }
 .panel-link:hover {
-  color: var(--accent);
+  color: var(--signal);
 }
 .activity-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-top: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--signal);
+  margin-top: 6px;
 }
 /* Documents */
 .doc-toolbar {
@@ -105,8 +113,10 @@
 }
 .doc-subname {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 400;
+  letter-spacing: 0.04em;
+  font-variant-ligatures: none;
 }
 .load-more {
   padding: 12px;
@@ -121,7 +131,7 @@
 }
 .upload-head h2 {
   margin: 0;
-  font-size: 21px;
+  font-size: 19px;
 }
 .upload-head p {
   margin: 4px 0 0;
@@ -135,8 +145,10 @@
 .upload-drop .muted {
   display: block;
   font-family: var(--mono);
-  font-size: 10.5px;
-  margin-top: 5px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  margin-top: 6px;
+  font-variant-ligatures: none;
 }
 .upload-drop-icon {
   margin: auto;
@@ -151,7 +163,7 @@
 /* Search */
 .search-form {
   border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: var(--r-3);
   background: var(--surface);
   padding: 10px 12px;
   display: flex;
@@ -198,9 +210,23 @@
 }
 .search-result > .muted {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
+  font-variant-ligatures: none;
+}
+/* Match strength reads as an instrument bar, not a badge. */
+.search-score {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex: 0 0 auto;
+}
+.search-score .bar {
+  width: 72px;
+}
+.search-score .mono {
+  color: var(--text);
 }
 /* Sign-in */
 .sign-in-layout {
@@ -221,8 +247,9 @@
 }
 .sign-in-form h1 {
   margin: 20px 0 8px;
-  font-size: 36px;
-  font-weight: 500;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
 }
 .sign-in-form > div > .muted {
   margin-bottom: 28px;
@@ -239,9 +266,10 @@
   margin: 18px 0 24px;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  font-variant-ligatures: none;
 }
 .sign-in-divider span {
   height: 1px;
@@ -253,6 +281,7 @@
   text-align: center;
   font-size: 11px;
 }
+/* The counterweight panel: a ruled guarantee sheet, no pull-quote. */
 .sign-in-quote {
   border-left: 1px solid var(--line-strong);
   padding: 60px;
@@ -262,23 +291,40 @@
   color: var(--text);
 }
 .sign-in-quote div {
-  max-width: 520px;
+  max-width: 460px;
+  width: 100%;
 }
 .sign-in-quote p {
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 28px;
-  line-height: 1.42;
-  letter-spacing: -0.01em;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  margin: 0 0 var(--s-6);
 }
 .sign-in-quote span {
   color: var(--muted);
   font-family: var(--mono);
-  font-style: normal;
-  font-size: 11px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  font-variant-ligatures: none;
 }
+.sign-in-specs {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+.sign-in-specs > div {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.sign-in-specs .cite {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 900px) {
   .metric-grid {
     grid-template-columns: repeat(2, 1fr);

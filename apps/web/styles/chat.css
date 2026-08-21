@@ -19,8 +19,9 @@
   border-bottom: 1px solid var(--line);
 }
 .chat-header h1 {
-  font-size: 21px;
-  font-weight: 500;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
   margin: 0;
 }
 .chat-header p {
@@ -33,16 +34,17 @@
   gap: 7px;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   white-space: nowrap;
+  font-variant-ligatures: none;
 }
 .chat-live-status > span {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--success);
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--signal);
   animation: chat-pulse 1.4s ease-in-out infinite;
 }
 .chat-scroll {
@@ -106,25 +108,25 @@
   align-self: flex-end;
   padding: 10px 14px;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--r-3);
   background: var(--surface);
 }
 .message.assistant {
   align-self: flex-start;
 }
-/* The Kivo "seal". */
+/* The assistant mark. Outlined rather than filled — the accent stays a mark. */
 .ai-orb {
-  width: 27px;
-  height: 27px;
+  width: 26px;
+  height: 26px;
   flex: 0 0 auto;
-  border-radius: 2px;
-  background: var(--accent);
   display: grid;
   place-items: center;
-  color: #fdfbf5;
-  font-family: var(--serif);
-  font-size: 15px;
-  font-weight: 500;
+  color: var(--text);
+}
+.ai-orb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .message-body {
   min-width: 0;
@@ -161,16 +163,16 @@
 .message-markdown h2,
 .message-markdown h3,
 .message-markdown h4 {
-  font-family: var(--serif);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   margin: 1.25em 0 0.45em;
   line-height: 1.3;
 }
 .message-markdown h1 {
-  font-size: 22px;
+  font-size: 21px;
 }
 .message-markdown h2 {
-  font-size: 19px;
+  font-size: 18px;
 }
 .message-markdown h3,
 .message-markdown h4 {
@@ -190,31 +192,33 @@
   font-weight: 650;
 }
 .message-markdown a {
-  color: var(--accent);
+  color: var(--signal);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 .message-markdown :not(pre) > code {
   padding: 0.14em 0.36em;
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: var(--r-1);
   background: var(--surface);
-  font-family: var(--mono);
-  font-size: 0.86em;
+  font-family: var(--code);
+  font-size: 0.88em;
 }
 .message-markdown pre,
 .message-markdown blockquote {
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--r-3);
   background: var(--surface);
+}
+.message-markdown pre,
+.message-markdown pre code {
+  font-family: var(--code);
 }
 .message-markdown blockquote {
   padding: 10px 14px;
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--signal);
   color: var(--muted);
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 15px;
+  font-size: 13.5px;
 }
 .message-markdown table {
   width: 100%;
@@ -230,10 +234,11 @@
 .message-markdown th {
   background: var(--surface);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   font-weight: 500;
+  font-variant-ligatures: none;
 }
 .message-sources {
   display: flex;
@@ -271,7 +276,7 @@
 .message-actions button {
   width: 28px;
   height: 28px;
-  border-radius: 2px;
+  border-radius: var(--r-2);
 }
 .message-actions button:hover {
   border-color: var(--line);
@@ -319,7 +324,7 @@
   margin-top: 6px;
   padding: 6px 9px;
   border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: var(--r-2);
   color: var(--text);
   background: transparent;
   cursor: pointer;
@@ -334,13 +339,12 @@
   width: 36px;
   height: 36px;
   border-color: var(--line-strong);
-  border-radius: 999px;
+  border-radius: var(--r-full);
   background: var(--surface);
-  box-shadow: 0 8px 24px rgb(33 29 22 / 0.14);
 }
 .chat-scroll-button:hover {
   color: var(--text);
-  border-color: var(--accent);
+  border-color: var(--signal);
 }
 .chat-error {
   align-self: stretch;
@@ -367,11 +371,11 @@
   gap: 8px;
   padding: 8px;
   border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: var(--r-3);
   background: var(--surface);
 }
 .chat-composer:focus-within {
-  border-color: var(--text);
+  border-color: var(--signal);
 }
 .chat-composer textarea {
   flex: 1;
@@ -391,7 +395,9 @@
   margin: 7px 0 0;
   text-align: center;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  font-variant-ligatures: none;
 }
 .chat-aside {
   min-width: 0;
@@ -413,8 +419,8 @@
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--line);
-  border-left: 2px solid var(--accent);
-  border-radius: 2px;
+  border-left: 2px solid var(--signal);
+  border-radius: var(--r-2);
   background: var(--surface);
   font-size: 11.5px;
 }

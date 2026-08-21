@@ -27,10 +27,10 @@ export default function Docs() {
         JSON. Kivo extracts in your browser, indexes in the background, and makes every answer
         traceable.
       </p>
-      <div className="index-list">
+      <div className="spec-grid sequence">
         {steps.map(({ title, body }, index) => (
-          <article className="index-row" key={title}>
-            <span className="index-number">{String(index + 1).padStart(2, "0")}</span>
+          <article className="spec-cell" key={title}>
+            <span className="spec-index">{String(index + 1).padStart(2, "0")}</span>
             <h3>{title}</h3>
             <p>{body}</p>
           </article>

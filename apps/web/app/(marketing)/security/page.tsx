@@ -12,20 +12,16 @@ export default function Security() {
   return (
     <section className="section page-section">
       <div className="section-kicker">Security</div>
-      <h2>
-        Trust is part of
-        <br />
-        the retrieval pipeline.
-      </h2>
+      <h2>Trust is part of the retrieval pipeline.</h2>
       <p className="section-lead">
         Kivo is designed for least privilege, explicit tenant boundaries, and privacy-preserving
         operations from upload through deletion. Each control is implemented as a centralized,
         testable platform control—not a UI convention.
       </p>
-      <div className="index-list">
+      <div className="spec-grid sequence">
         {controls.map((item, index) => (
-          <article className="index-row" key={item}>
-            <span className="index-number">{String(index + 1).padStart(2, "0")}</span>
+          <article className="spec-cell" key={item}>
+            <span className="spec-index">{String(index + 1).padStart(2, "0")}</span>
             <h3>{item}</h3>
           </article>
         ))}
