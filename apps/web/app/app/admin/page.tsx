@@ -1,4 +1,4 @@
-import { SectionPage } from "@/components/section-page";
+import { AdminView } from "@/components/sections/admin-view";
 export default function Page() {
-  return <SectionPage kind="admin" />;
+  return <AdminView />;
 }

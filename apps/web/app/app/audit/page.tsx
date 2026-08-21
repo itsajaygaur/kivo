@@ -1,4 +1,4 @@
-import { SectionPage } from "@/components/section-page";
+import { AuditView } from "@/components/sections/audit-view";
 export default function Page() {
-  return <SectionPage kind="audit" />;
+  return <AuditView />;
 }

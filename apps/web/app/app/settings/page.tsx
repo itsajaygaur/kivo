@@ -1,4 +1,4 @@
-import { SectionPage } from "@/components/section-page";
+import { SettingsView } from "@/components/sections/settings-view";
 export default function Page() {
-  return <SectionPage kind="settings" />;
+  return <SettingsView />;
 }
