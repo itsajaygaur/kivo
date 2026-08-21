@@ -1,19 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  File,
-  FileText,
-  LoaderCircle,
-  Search,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
+import { CheckCircle2, File, FileText, Search, Trash2, Upload, X } from "lucide-react";
 import { api, ApiError, formatBytes, formatRelativeTime } from "@/lib/api-client";
 import { detectMimeType, extractDocument } from "@/lib/extraction";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Dialog } from "@/components/ui/dialog";
+import { Notice } from "@/components/ui/notice";
+import { Spinner } from "@/components/ui/spinner";
+import { StatusStamp } from "@/components/ui/status-stamp";
 
 type DocumentRow = {
   id: string;
@@ -61,6 +56,7 @@ export function DocumentsView() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<DocumentRow | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -204,7 +200,6 @@ export function DocumentsView() {
   }
 
   async function remove(document: DocumentRow) {
-    if (!window.confirm(`Delete “${document.title}”? This removes it from future answers.`)) return;
     try {
       await api(`/documents/${document.id}`, { method: "DELETE" });
       setDocuments((current) => current.filter(({ id }) => id !== document.id));
@@ -229,27 +224,15 @@ export function DocumentsView() {
           Upload documents
         </button>
       </div>
-      {error && (
-        <div className="notice error" role="alert">
-          <AlertCircle size={15} />
-          {error}
-        </div>
-      )}
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <label className="search-trigger" style={{ width: 300 }}>
+      {error && <Notice error>{error}</Notice>}
+      <div className="doc-toolbar">
+        <label className="search-trigger doc-search">
           <Search size={14} />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search documents"
             aria-label="Search documents"
-            style={{
-              border: 0,
-              outline: 0,
-              background: "transparent",
-              color: "var(--text)",
-              width: "100%",
-            }}
           />
         </label>
       </div>
@@ -275,32 +258,26 @@ export function DocumentsView() {
                     </span>
                     <div>
                       {document.title}
-                      <div className="muted" style={{ fontSize: 10, fontWeight: 400 }}>
-                        {document.filename}
-                      </div>
+                      <div className="muted doc-subname">{document.filename}</div>
                     </div>
                   </div>
                 </td>
                 <td>{document.collectionName ?? "Unsorted"}</td>
                 <td className="muted">{formatBytes(document.bytes)}</td>
                 <td>
-                  <span className={`status ${document.status === "failed" ? "status-error" : ""}`}>
-                    {document.status === "ready" ? (
-                      <CheckCircle2 size={10} />
-                    ) : (
-                      <LoaderCircle size={10} />
-                    )}
+                  <StatusStamp failed={document.status === "failed"}>
+                    {document.status === "ready" ? <CheckCircle2 size={10} /> : <Spinner size={10} />}
                     {document.status === "indexing"
                       ? `Indexing ${document.progress}%`
                       : document.status}
-                  </span>
+                  </StatusStamp>
                 </td>
                 <td className="muted">{formatRelativeTime(document.updatedAt)}</td>
                 <td>
                   <button
                     className="icon-button"
                     aria-label={`Delete ${document.title}`}
-                    onClick={() => void remove(document)}
+                    onClick={() => setDeleting(document)}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -317,85 +294,80 @@ export function DocumentsView() {
           </tbody>
         </table>
         {nextCursor && (
-          <div style={{ padding: 12, textAlign: "center" }}>
+          <div className="load-more">
             <button className="button-secondary" onClick={() => void loadMore()}>
               Load more documents
             </button>
           </div>
         )}
       </section>
-      {open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Upload documents"
-          className="dialog-backdrop"
-        >
-          <div className="panel upload-dialog">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 18 }}>Add knowledge</h2>
-                <p className="muted" style={{ fontSize: 12 }}>
-                  Files are extracted locally, then securely indexed.
-                </p>
-              </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="icon-button"
-                aria-label="Close upload"
-                disabled={uploading}
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <label className="field-label" htmlFor="upload-collection">
-              Collection
-            </label>
-            <select
-              id="upload-collection"
-              value={collectionId}
-              onChange={(event) => setCollectionId(event.target.value)}
-              className="field-input"
-            >
-              <option value="">Unsorted</option>
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => input.current?.click()}
-              className="upload-drop"
-              disabled={uploading}
-            >
-              <span>
-                <span className="feature-icon" style={{ margin: "auto" }}>
-                  {uploading ? <LoaderCircle size={17} /> : <Upload size={17} />}
-                </span>
-                <b style={{ display: "block", marginTop: 12 }}>
-                  {uploadStatus ?? "Choose files to upload"}
-                </b>
-                <span className="muted" style={{ display: "block", fontSize: 11, marginTop: 5 }}>
-                  PDF, DOCX, TXT, MD, HTML, CSV, JSON · up to 25 MB
-                </span>
-              </span>
-            </button>
-            <input
-              ref={input}
-              type="file"
-              multiple
-              hidden
-              accept=".pdf,.docx,.txt,.md,.mdx,.html,.csv,.json"
-              onChange={(event) => void choose(event.target.files)}
-            />
-            <div style={{ marginTop: 15, fontSize: 11 }} className="muted">
-              <File size={12} style={{ display: "inline" }} /> Originals are stored when private
-              object storage is configured.
-            </div>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        dismissable={!uploading}
+        label="Upload documents"
+      >
+        <div className="upload-head">
+          <div>
+            <h2>Add knowledge</h2>
+            <p className="muted">Files are extracted locally, then securely indexed.</p>
           </div>
+          <button
+            onClick={() => setOpen(false)}
+            className="icon-button"
+            aria-label="Close upload"
+            disabled={uploading}
+          >
+            <X size={14} />
+          </button>
         </div>
-      )}
+        <label className="field-label" htmlFor="upload-collection">
+          Collection
+        </label>
+        <select
+          id="upload-collection"
+          value={collectionId}
+          onChange={(event) => setCollectionId(event.target.value)}
+          className="field-input"
+        >
+          <option value="">Unsorted</option>
+          {collections.map((collection) => (
+            <option key={collection.id} value={collection.id}>
+              {collection.name}
+            </option>
+          ))}
+        </select>
+        <button onClick={() => input.current?.click()} className="upload-drop" disabled={uploading}>
+          <span>
+            <span className="feature-icon upload-drop-icon">
+              {uploading ? <Spinner size={17} /> : <Upload size={17} />}
+            </span>
+            <b>{uploadStatus ?? "Choose files to upload"}</b>
+            <span className="muted">PDF, DOCX, TXT, MD, HTML, CSV, JSON · up to 25 MB</span>
+          </span>
+        </button>
+        <input
+          ref={input}
+          type="file"
+          multiple
+          hidden
+          accept=".pdf,.docx,.txt,.md,.mdx,.html,.csv,.json"
+          onChange={(event) => void choose(event.target.files)}
+        />
+        <div className="upload-note muted">
+          <File size={12} /> Originals are stored when private object storage is configured.
+        </div>
+      </Dialog>
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete document"
+        description={`Delete “${deleting?.title ?? ""}”? This removes it from future answers.`}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleting) await remove(deleting);
+        }}
+        onClose={() => setDeleting(null)}
+      />
     </div>
   );
 }

@@ -64,6 +64,69 @@
   background: var(--accent);
   margin-top: 5px;
 }
+/* Documents */
+.doc-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.doc-search {
+  width: 300px;
+  cursor: text;
+}
+.doc-search input {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  width: 100%;
+  font-size: 12.5px;
+}
+.doc-subname {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+}
+.load-more {
+  padding: 12px;
+  text-align: center;
+  border-top: 1px solid var(--line);
+}
+.upload-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.upload-head h2 {
+  margin: 0;
+  font-size: 21px;
+}
+.upload-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+.upload-drop b {
+  display: block;
+  margin-top: 12px;
+  color: var(--text);
+}
+.upload-drop .muted {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  margin-top: 5px;
+}
+.upload-drop-icon {
+  margin: auto;
+}
+.upload-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 15px;
+  font-size: 11px;
+}
 /* Search */
 .search-form {
   border: 1px solid var(--line-strong);
