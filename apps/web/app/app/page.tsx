@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api, formatBytes, formatRelativeTime } from "@/lib/api-client";
+import { StatusStamp } from "@/components/ui/status-stamp";
 
 type Usage = {
   documents: number;
@@ -115,7 +116,7 @@ export default function Overview() {
         <section className="panel">
           <header className="panel-head">
             <h2>Recently updated</h2>
-            <Link href="/app/documents" className="muted" style={{ fontSize: 11 }}>
+            <Link href="/app/documents" className="muted panel-link">
               View all <ArrowUpRight size={11} />
             </Link>
           </header>
@@ -139,18 +140,16 @@ export default function Overview() {
                         </span>
                         <div>
                           {document.title}
-                          <div className="muted" style={{ fontSize: 10, fontWeight: 400 }}>
-                            {document.filename}
-                          </div>
+                          <div className="muted doc-subname">{document.filename}</div>
                         </div>
                       </div>
                     </td>
                     <td>{document.collectionName ?? "Unsorted"}</td>
                     <td>
-                      <span className="status">
+                      <StatusStamp>
                         {document.status === "ready" && <CheckCircle2 size={10} />}
                         {document.status}
-                      </span>
+                      </StatusStamp>
                     </td>
                     <td className="muted">{formatRelativeTime(document.updatedAt)}</td>
                   </tr>
@@ -177,14 +176,14 @@ export default function Overview() {
                 <span className="activity-dot" />
                 <div>
                   {event.action.replaceAll(".", " ")}
-                  <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>
+                  <div className="muted activity-meta">
                     {formatRelativeTime(event.createdAt)} · {event.targetType}
                   </div>
                 </div>
               </div>
             ))}
             {!activity.length && (
-              <p className="muted" style={{ fontSize: 11, padding: 14 }}>
+              <p className="muted activity-empty">
                 Activity will appear as your team changes the knowledge base.
               </p>
             )}

@@ -1,4 +1,4 @@
-import { SectionPage } from "@/components/section-page";
+import { MembersView } from "@/components/sections/members-view";
 export default function Page() {
-  return <SectionPage kind="members" />;
+  return <MembersView />;
 }

@@ -1,4 +1,4 @@
-import { SectionPage } from "@/components/section-page";
+import { CollectionsView } from "@/components/sections/collections-view";
 export default function Page() {
-  return <SectionPage kind="collections" />;
+  return <CollectionsView />;
 }

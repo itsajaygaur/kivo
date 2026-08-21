@@ -255,7 +255,7 @@ export function ChatPanel() {
         </Conversation>
 
         <form onSubmit={submit} className="chat-composer-wrap">
-          <div className="glass chat-composer">
+          <div className="chat-composer">
             <textarea
               value={question}
               onChange={(event) => setQuestion(event.target.value)}

@@ -15,3 +15,20 @@
 Set `KIVO_DEMO_MODE=true` only when the deployment should offer the explicit `/demo` entry point. Normal visitors still need a session; shared demo visitors are read-only — they can browse documents, collections, usage, search, and chat, and cannot perform any mutation, read member or audit data, or trigger OCR. Set it to `false` for a private-only deployment. OAuth callback URLs use `/api/auth/callback/{provider}`. The default `workers.dev` host avoids domain cost.
 
 For a complete local run, copy `.env.example` to `apps/web/.dev.vars` **and** `apps/ai-worker/.dev.vars` (both workers need `INTERNAL_SERVICE_TOKEN`; the AI worker also reads `VECTORIZE_MODE=off`), use `pnpm db:migrate:local`, `pnpm seed`, then `pnpm dev:cloudflare`. Both workers share `.wrangler/state`; Workers AI is remote while D1 and queues remain local. Vectorize is unavailable in Wrangler local mode; `VECTORIZE_MODE=off` makes ingestion and retrieval fall back to FTS5 deliberately instead of burning retries.
+
+## Continuous deployment (Workers Builds)
+
+Both Workers deploy from the connected Git repository. Because this is a pnpm monorepo, each Worker's **Settings → Build → Build configuration** must point at its own package; the defaults assume a single-app repository and will fail with `Missing entry-point to Worker script or to assets directory`, because the deploy step runs where no `wrangler.jsonc` exists.
+
+For `kivo-web`:
+
+| Setting                                 | Value                              |
+| --------------------------------------- | ---------------------------------- |
+| Root directory                          | `apps/web`                         |
+| Build command                           | `pnpm build:worker`                |
+| Deploy command (production branch)      | `npx opennextjs-cloudflare deploy` |
+| Non-production branch (version) command | `npx wrangler versions upload`     |
+
+`next build` alone is not deployable: only `build:worker` (`opennextjs-cloudflare build`) emits `.open-next/worker.js`, which `wrangler.jsonc` declares as `main`.
+
+Two behaviours matter when changing these settings. Saved settings apply to the **next** build, whereas **retrying** a build uses whatever settings exist at retry time — so retry a build and inspect its own "Build settings" panel to confirm a change actually persisted. A retry also posts a fresh check run to the pull request, so a red check can be cleared without pushing a new commit.

@@ -1,5 +1,3 @@
-import { Logo } from "@/components/logo";
-import Link from "next/link";
 const controls = [
   "Tenant IDs required at every repository boundary",
   "Private R2 objects with short-lived upload grants",
@@ -12,34 +10,26 @@ const controls = [
 ];
 export default function Security() {
   return (
-    <main>
-      <nav className="marketing-nav">
-        <Logo />
-        <Link href="/app" className="button-primary">
-          Open Kivo
-        </Link>
-      </nav>
-      <section className="section" style={{ paddingTop: 100 }}>
-        <div className="section-kicker">Security</div>
-        <h2>
-          Trust is part of
-          <br />
-          the retrieval pipeline.
-        </h2>
-        <p className="section-lead">
-          Kivo is designed for least privilege, explicit tenant boundaries, and privacy-preserving
-          operations from upload through deletion.
-        </p>
-        <div className="feature-grid">
-          {controls.map((item, i) => (
-            <article className="feature-card" key={item}>
-              <div className="feature-icon">0{i + 1}</div>
-              <h3 style={{ marginTop: 38 }}>{item}</h3>
-              <p>Implemented as a centralized, testable platform control—not a UI convention.</p>
-            </article>
-          ))}
-        </div>
-      </section>
-    </main>
+    <section className="section page-section">
+      <div className="section-kicker">Security</div>
+      <h2>
+        Trust is part of
+        <br />
+        the retrieval pipeline.
+      </h2>
+      <p className="section-lead">
+        Kivo is designed for least privilege, explicit tenant boundaries, and privacy-preserving
+        operations from upload through deletion. Each control is implemented as a centralized,
+        testable platform control—not a UI convention.
+      </p>
+      <div className="index-list">
+        {controls.map((item, index) => (
+          <article className="index-row" key={item}>
+            <span className="index-number">{String(index + 1).padStart(2, "0")}</span>
+            <h3>{item}</h3>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }

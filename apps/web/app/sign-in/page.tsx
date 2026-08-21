@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
-import { AlertCircle, Code2, KeyRound, LoaderCircle } from "lucide-react";
+import { Code2, KeyRound } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { authClient } from "@/lib/auth-client";
 import { api } from "@/lib/api-client";
 import { safeReturnTo } from "@/lib/safe-return-to";
+import { Notice } from "@/components/ui/notice";
+import { Spinner } from "@/components/ui/spinner";
 
 type Capabilities = {
   emailPassword: boolean;
@@ -148,12 +150,7 @@ export default function SignIn() {
               ? "Your account is ready. Give the first workspace a name."
               : "Sign in to ask better questions of your team’s knowledge."}
           </p>
-          {error && (
-            <div className="notice error" role="alert">
-              <AlertCircle size={14} />
-              {error}
-            </div>
-          )}
+          {error && <Notice error>{error}</Notice>}
 
           {onboarding ? (
             <form
@@ -179,7 +176,7 @@ export default function SignIn() {
                 className="button-primary"
                 disabled={Boolean(pending) || workspaceName.trim().length < 2}
               >
-                {pending === "workspace" && <LoaderCircle size={16} />} Create workspace
+                {pending === "workspace" && <Spinner size={16} />} Create workspace
               </button>
             </form>
           ) : (
@@ -221,7 +218,7 @@ export default function SignIn() {
                   />
                 </label>
                 <button className="button-primary" disabled={Boolean(pending)}>
-                  {pending === "credentials" && <LoaderCircle size={16} />}
+                  {pending === "credentials" && <Spinner size={16} />}
                   {mode === "sign-up" ? "Create account" : "Sign in"}
                 </button>
               </form>
@@ -248,7 +245,7 @@ export default function SignIn() {
                   onClick={() => void social("google")}
                   disabled={Boolean(pending)}
                 >
-                  {pending === "google" ? <LoaderCircle size={16} /> : "G"} Continue with Google
+                  {pending === "google" ? <Spinner size={16} /> : "G"} Continue with Google
                 </button>
               )}
               {capabilities?.github && (
@@ -257,8 +254,8 @@ export default function SignIn() {
                   onClick={() => void social("github")}
                   disabled={Boolean(pending)}
                 >
-                  {pending === "github" ? <LoaderCircle size={16} /> : <Code2 size={16} />} Continue
-                  with GitHub
+                  {pending === "github" ? <Spinner size={16} /> : <Code2 size={16} />} Continue with
+                  GitHub
                 </button>
               )}
               {capabilities?.passkeys && (
@@ -267,8 +264,8 @@ export default function SignIn() {
                   onClick={() => void passkey()}
                   disabled={Boolean(pending)}
                 >
-                  {pending === "passkey" ? <LoaderCircle size={16} /> : <KeyRound size={16} />} Sign
-                  in with a passkey
+                  {pending === "passkey" ? <Spinner size={16} /> : <KeyRound size={16} />} Sign in
+                  with a passkey
                 </button>
               )}
               {capabilities?.demo && (
@@ -281,7 +278,7 @@ export default function SignIn() {
                     onClick={() => void demo()}
                     disabled={Boolean(pending)}
                   >
-                    {pending === "demo" && <LoaderCircle size={16} />} Enter demo workspace
+                    {pending === "demo" && <Spinner size={16} />} Enter demo workspace
                   </button>
                 </>
               )}
@@ -292,7 +289,7 @@ export default function SignIn() {
           </p>
         </div>
       </section>
-      <section className="sign-in-quote noise">
+      <section className="sign-in-quote">
         <div>
           <p>Ask your knowledge base—and inspect exactly where every answer came from.</p>
           <span>Private, permission-aware retrieval</span>

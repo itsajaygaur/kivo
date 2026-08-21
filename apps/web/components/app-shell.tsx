@@ -3,7 +3,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Activity,
   BarChart3,
   Bot,
   Boxes,
@@ -20,6 +19,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { Logo } from "./logo";
+import { CommandPalette } from "./command-palette";
 import { api, ApiError } from "@/lib/api-client";
 import { authClient } from "@/lib/auth-client";
 const primary = [
@@ -34,9 +34,18 @@ const manage = [
   ["/app/members", Users, "Members"],
   ["/app/audit", History, "Audit log"],
 ] as const;
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [workspace, setWorkspace] = useState<{
     id: string;
     name: string;
@@ -73,6 +82,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       });
   }, [router]);
 
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((current) => !current);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   async function switchWorkspace(organizationId: string) {
     if (!organizationId || organizationId === workspace?.id) return;
     await api(`/workspaces/${organizationId}/activate`, { method: "POST" });
@@ -84,23 +104,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     await authClient.signOut().catch(() => undefined);
     window.location.assign("/sign-in");
   }
-  const initials = (workspace?.userName ?? "Kivo User")
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
   return (
     <div className="app-layout">
       <aside className="sidebar">
         <Logo href="/app" />
         <div className="workspace-switch">
-          <span className="workspace-logo">AR</span>
-          <div style={{ textAlign: "left", minWidth: 0 }}>
-            <div style={{ fontWeight: 650, fontSize: 12 }}>{workspace?.name ?? "Workspace"}</div>
-            <div className="muted" style={{ fontSize: 10 }}>
-              {workspace ? `${workspace.role} access` : "Loading…"}
-            </div>
+          <span className="workspace-logo">{initialsOf(workspace?.name ?? "Kivo")}</span>
+          <div className="workspace-meta">
+            <strong>{workspace?.name ?? "Workspace"}</strong>
+            <small>{workspace ? `${workspace.role} access` : "Loading…"}</small>
           </div>
           {workspaces.length > 1 ? (
             <select
@@ -115,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ))}
             </select>
           ) : (
-            <ChevronsUpDown size={13} style={{ marginLeft: "auto" }} />
+            <ChevronsUpDown size={13} className="workspace-caret" />
           )}
         </div>
         <div className="side-label">Workspace</div>
@@ -124,7 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             aria-label={label}
             href={href}
             key={href}
-            className={`side-link ${match.test(path) ? "active" : ""}`}
+            className={`side-link side-link-mobile ${match.test(path) ? "active" : ""}`}
           >
             <Icon />
             <span>{label}</span>
@@ -158,14 +170,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span>Help & docs</span>
           </Link>
           <div className="user-pill">
-            <span className="avatar">{initials}</span>
-            <div>
-              <div style={{ fontWeight: 620, fontSize: 11 }}>
-                {workspace?.userName ?? "Kivo User"}
-              </div>
-              <div className="muted" style={{ fontSize: 10 }}>
-                {workspace?.role ?? "Member"}
-              </div>
+            <span className="avatar">{initialsOf(workspace?.userName ?? "Kivo User")}</span>
+            <div className="user-meta">
+              <strong>{workspace?.userName ?? "Kivo User"}</strong>
+              <small>{workspace?.role ?? "Member"}</small>
             </div>
             <button aria-label="Sign out" className="icon-button" onClick={() => void signOut()}>
               <LogOut size={14} />
@@ -175,26 +183,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <main className="app-main">
         <header className="topbar">
-          <Link href="/app/search" className="search-trigger">
+          <button
+            type="button"
+            className="search-trigger"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Open command menu"
+          >
             <Search size={14} />
             Search your knowledge…<span className="kbd">⌘ K</span>
-          </Link>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="status">
-              <span className="eyebrow-dot" />
-              All systems normal
-            </span>
-            <Link
-              href="/app/documents"
-              className="button-primary"
-              style={{ padding: "8px 12px", fontSize: 12 }}
-            >
+          </button>
+          <div className="topbar-actions">
+            <Link href="/app/documents" className="button-primary compact">
               <Upload size={14} />
               Upload
             </Link>
           </div>
         </header>
         {children}
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          platformAdmin={workspace?.platformAdmin ?? false}
+        />
       </main>
     </div>
   );
