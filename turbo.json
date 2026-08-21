@@ -2,6 +2,8 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build": { "dependsOn": ["^build"], "outputs": [".next/**", ".open-next/**", "dist/**"] },
+    "@kivo/db#build": { "dependsOn": ["^build"], "outputs": [] },
+    "@kivo/shared#build": { "dependsOn": ["^build"], "outputs": [] },
     "dev": { "cache": false, "persistent": true },
     "dev:cloudflare": { "cache": false, "persistent": true },
     "lint": { "dependsOn": ["^lint"] },
