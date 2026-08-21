@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { AlertCircle, BookOpen, LoaderCircle, Search as SearchIcon, Sparkles } from "lucide-react";
+import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { BookOpen, Search as SearchIcon } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Notice } from "@/components/ui/notice";
+import { Spinner } from "@/components/ui/spinner";
+import { StatusStamp } from "@/components/ui/status-stamp";
 
 type Collection = { id: string; name: string };
 type SearchResult = {
@@ -13,8 +18,9 @@ type SearchResult = {
   score: number;
 };
 
-export default function Search() {
-  const [query, setQuery] = useState("");
+function SearchView() {
+  const params = useSearchParams();
+  const [query, setQuery] = useState(params.get("q") ?? "");
   const [collectionId, setCollectionId] = useState("");
   const [collections, setCollections] = useState<Collection[]>([]);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -28,27 +34,40 @@ export default function Search() {
       .catch(() => undefined);
   }, []);
 
-  async function submit(event: FormEvent) {
+  const runSearch = useCallback(
+    async (term: string, scope: string) => {
+      if (term.trim().length < 2) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await api<{ data: SearchResult[] }>("/search", {
+          method: "POST",
+          body: JSON.stringify({
+            query: term.trim(),
+            limit: 12,
+            collectionIds: scope ? [scope] : undefined,
+          }),
+        });
+        setResults(response.data);
+        setSearched(true);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Search failed.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setLoading, setError, setResults, setSearched],
+  );
+
+  // Command-palette hand-off: /app/search?q=… runs the query on arrival.
+  const initialQuery = params.get("q");
+  useEffect(() => {
+    if (initialQuery && initialQuery.trim().length >= 2) void runSearch(initialQuery, "");
+  }, [initialQuery, runSearch]);
+
+  function submit(event: FormEvent) {
     event.preventDefault();
-    if (query.trim().length < 2) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api<{ data: SearchResult[] }>("/search", {
-        method: "POST",
-        body: JSON.stringify({
-          query: query.trim(),
-          limit: 12,
-          collectionIds: collectionId ? [collectionId] : undefined,
-        }),
-      });
-      setResults(response.data);
-      setSearched(true);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Search failed.");
-    } finally {
-      setLoading(false);
-    }
+    void runSearch(query, collectionId);
   }
 
   return (
@@ -59,7 +78,7 @@ export default function Search() {
           <p>Hybrid semantic and full-text search across knowledge you can access.</p>
         </div>
       </div>
-      <form onSubmit={(event) => void submit(event)} className="search-form glass">
+      <form onSubmit={submit} className="search-form">
         <SearchIcon size={18} className="muted" />
         <input
           autoFocus
@@ -81,40 +100,30 @@ export default function Search() {
           ))}
         </select>
         <button className="button-primary" disabled={loading || query.trim().length < 2}>
-          {loading ? <LoaderCircle size={14} /> : <Sparkles size={14} />}
+          {loading ? <Spinner /> : <SearchIcon size={14} />}
           {loading ? "Searching…" : "Search"}
         </button>
       </form>
-      {error && (
-        <div className="notice error" role="alert">
-          <AlertCircle size={15} />
-          {error}
-        </div>
-      )}
+      {error && <Notice error>{error}</Notice>}
       {!searched && !error && (
-        <div className="empty-state">
-          <div className="feature-icon">
-            <SearchIcon size={18} />
-          </div>
-          <h2>Search every indexed source at once</h2>
-          <p className="muted">Results include matching passages, page numbers, and relevance.</p>
-        </div>
+        <EmptyState icon={SearchIcon} title="Search every indexed source at once">
+          Results include matching passages, page numbers, and relevance.
+        </EmptyState>
       )}
       {searched && !results.length && (
-        <div className="empty-state">
-          <h2>No supported matches</h2>
-          <p className="muted">Try broader wording or another collection.</p>
-        </div>
+        <EmptyState title="No supported matches">
+          Try broader wording or another collection.
+        </EmptyState>
       )}
       {!!results.length && (
         <section className="search-results" aria-label="Search results">
           {results.map((result) => (
-            <article className="panel search-result" key={result.id}>
+            <article className="search-result" key={result.id}>
               <header>
                 <span>
                   <BookOpen size={14} /> {result.title}
                 </span>
-                <span className="status">{Math.round(result.score * 100)}% match</span>
+                <StatusStamp>{Math.round(result.score * 100)}% match</StatusStamp>
               </header>
               <p>{result.excerpt}</p>
               <div className="muted">{result.page ? `Page ${result.page}` : "Extracted text"}</div>
@@ -123,5 +132,13 @@ export default function Search() {
         </section>
       )}
     </div>
+  );
+}
+
+export default function Search() {
+  return (
+    <Suspense>
+      <SearchView />
+    </Suspense>
   );
 }

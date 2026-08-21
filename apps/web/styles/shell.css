@@ -44,6 +44,40 @@
   font-size: 10px;
   font-weight: 600;
 }
+.workspace-meta {
+  text-align: left;
+  min-width: 0;
+}
+.workspace-meta strong,
+.user-meta strong {
+  display: block;
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workspace-meta small,
+.user-meta small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.workspace-caret {
+  margin-left: auto;
+  color: var(--muted);
+}
+.user-meta {
+  min-width: 0;
+  flex: 1;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .side-label {
   font-family: var(--mono);
   font-size: 10px;
@@ -278,23 +312,22 @@
   .workspace-switch,
   .sidebar > .side-label,
   .sidebar-bottom,
-  .sidebar .side-link:nth-of-type(n + 6) {
+  .sidebar .side-link:not(.side-link-mobile) {
     display: none;
   }
-  .sidebar > .side-link {
+  .sidebar > .side-link-mobile {
     display: flex;
     height: 45px;
     border-left: 0;
     border-top: 2px solid transparent;
   }
-  .sidebar > .side-link.active {
+  .sidebar > .side-link-mobile.active {
     border-top-color: var(--accent);
   }
   .app-main {
     padding-bottom: 58px;
   }
-  .topbar .search-trigger,
-  .topbar .status {
+  .topbar .search-trigger {
     display: none;
   }
   .topbar > div {
