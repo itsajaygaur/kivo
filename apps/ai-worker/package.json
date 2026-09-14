@@ -14,9 +14,9 @@
   },
   "dependencies": {
     "@kivo/shared": "workspace:*",
-    "ai": "7.0.48",
-    "hono": "4.12.33",
-    "zod": "4.4.3"
+    "ai": "7.0.97",
+    "hono": "4.13.7",
+    "zod": "4.6.2"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260801.1",
